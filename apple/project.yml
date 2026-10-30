@@ -1,0 +1,85 @@
+# XcodeGen spec: run `xcodegen` in this folder to create MorrowindMap.xcodeproj.
+# Change the bundle ID prefix and set DEVELOPMENT_TEAM before running on a device.
+name: MorrowindMap
+options:
+  bundleIdPrefix: com.example.morrowindmap
+  deploymentTarget:
+    iOS: "17.0"
+    watchOS: "10.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+
+packages:
+  MorrowindMap:
+    path: .
+
+targets:
+  MorrowindMap:
+    type: application
+    platform: iOS
+    sources: [iOSApp]
+    dependencies:
+      - package: MorrowindMap
+        product: MorrowindMapCore
+      - package: MorrowindMap
+        product: MorrowindMapUI
+      - target: MorrowindMapWatch
+    entitlements:
+      path: iOSApp/MorrowindMap.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
+        com.apple.developer.healthkit.background-delivery: true
+    info:
+      path: iOSApp/Info.plist
+      properties:
+        CFBundleDisplayName: Morrowind Map
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSHealthShareUsageDescription: "Your recorded workout routes reveal the parts of the map you have explored. The app never turns on GPS itself."
+        NSLocationWhenInUseUsageDescription: "Shows where you are on the map using the position your device already knows. The app doesn't start GPS tracking."
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.morrowindmap
+
+  MorrowindMapWatch:
+    type: application
+    platform: watchOS
+    sources: [WatchApp]
+    dependencies:
+      - package: MorrowindMap
+        product: MorrowindMapCore
+      - package: MorrowindMap
+        product: MorrowindMapUI
+    entitlements:
+      path: WatchApp/MorrowindMapWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
+        com.apple.developer.healthkit.background-delivery: true
+    info:
+      path: WatchApp/Info.plist
+      properties:
+        CFBundleDisplayName: Morrowind Map
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.example.morrowindmap
+        NSHealthShareUsageDescription: "Your recorded workout routes reveal the parts of the map you have explored. The app never turns on GPS itself."
+        NSLocationWhenInUseUsageDescription: "Shows where you are on the map using the position your watch already knows. The app doesn't start GPS tracking."
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.morrowindmap.watchkitapp
+
+schemes:
+  MorrowindMap:
+    build:
+      targets:
+        MorrowindMap: all
+    test:
+      targets:
+        - package: MorrowindMap/MorrowindMapCoreTests
