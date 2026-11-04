@@ -1,8 +1,8 @@
 # XcodeGen spec: run `xcodegen` in this folder to create MorrowindMap.xcodeproj.
-# Change the bundle ID prefix and set DEVELOPMENT_TEAM before running on a device.
+# DEVELOPMENT_TEAM and bundle IDs are set for device builds.
 name: MorrowindMap
 options:
-  bundleIdPrefix: com.example.morrowindmap
+  bundleIdPrefix: com.bartrobat.morrowindmap
   deploymentTarget:
     iOS: "17.0"
     watchOS: "10.0"
@@ -13,7 +13,7 @@ settings:
     SWIFT_VERSION: "5.9"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: MD223F7P7W
 
 packages:
   MorrowindMap:
@@ -46,7 +46,7 @@ targets:
         NSLocationWhenInUseUsageDescription: "Shows where you are on the map using the position your device already knows. The app doesn't start GPS tracking."
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.morrowindmap
+        PRODUCT_BUNDLE_IDENTIFIER: com.bartrobat.morrowindmap
 
   MorrowindMapWatch:
     type: application
@@ -68,12 +68,12 @@ targets:
       properties:
         CFBundleDisplayName: Morrowind Map
         WKApplication: true
-        WKCompanionAppBundleIdentifier: com.example.morrowindmap
+        WKCompanionAppBundleIdentifier: com.bartrobat.morrowindmap
         NSHealthShareUsageDescription: "Your recorded workout routes reveal the parts of the map you have explored. The app never turns on GPS itself."
         NSLocationWhenInUseUsageDescription: "Shows where you are on the map using the position your watch already knows. The app doesn't start GPS tracking."
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.morrowindmap.watchkitapp
+        PRODUCT_BUNDLE_IDENTIFIER: com.bartrobat.morrowindmap.watchkitapp
 
 schemes:
   MorrowindMap:

@@ -5,7 +5,7 @@ import Foundation
 public struct FogGrid: Sendable, Equatable {
     /// Cell zoom. z18 cells are ~153 m at the equator, ~98 m at 50°N.
     public static let cellZoom = 18
-    public static let defaultRevealRadiusMeters = 100.0
+    public static let defaultRevealRadiusMeters = 250.0
     /// Gaps longer than this between consecutive track points are not filled in (GPS dropouts, flights).
     public static let maxInterpolationGapMeters = 2_000.0
 
@@ -33,6 +33,13 @@ public struct FogGrid: Sendable, Equatable {
     /// Marks every cell whose centre is within `radius` meters of `p`. Returns how many cells were new.
     @discardableResult
     public mutating func reveal(_ p: GeoPoint, radius: Double = defaultRevealRadiusMeters) -> Int {
+        var bounds: CellRect?
+        return reveal(p, radius: radius, bounds: &bounds)
+    }
+
+    /// Same as `reveal(_:radius:)`, also growing `bounds` to cover every newly explored cell.
+    @discardableResult
+    public mutating func reveal(_ p: GeoPoint, radius: Double = defaultRevealRadiusMeters, bounds: inout CellRect?) -> Int {
         let n = 1 << Self.cellZoom
         let w = WebMercator.world(p)
         let fx = w.x * Double(n), fy = w.y * Double(n)
@@ -47,7 +54,11 @@ public struct FogGrid: Sendable, Equatable {
                 let ddx = Double(cx) + 0.5 - fx, ddy = Double(cy) + 0.5 - fy
                 // Always include the cell the point is in, even for tiny radii.
                 guard (dx == 0 && dy == 0) || ddx * ddx + ddy * ddy <= rCells * rCells else { continue }
-                if cells.insert(Self.key(x: ((cx % n) + n) % n, y: cy)).inserted { added += 1 }
+                let x = ((cx % n) + n) % n
+                if cells.insert(Self.key(x: x, y: cy)).inserted {
+                    added += 1
+                    bounds.include(x: x, y: cy)
+                }
             }
         }
         return added
@@ -57,22 +68,34 @@ public struct FogGrid: Sendable, Equatable {
     /// recordings (e.g. 1 point / 10 s) still leave a continuous trail.
     @discardableResult
     public mutating func reveal(track: [GeoPoint], radius: Double = defaultRevealRadiusMeters) -> Int {
+        var bounds: CellRect?
+        return reveal(track: track, radius: radius, bounds: &bounds)
+    }
+
+    /// Same as `reveal(track:radius:)`, also growing `bounds` to cover every newly explored cell.
+    /// Points closer than a quarter of the radius to the last revealed point are skipped: dense
+    /// recordings (1 point/s) would otherwise stamp nearly the same disc over and over.
+    @discardableResult
+    public mutating func reveal(track: [GeoPoint], radius: Double = defaultRevealRadiusMeters, bounds: inout CellRect?) -> Int {
         var added = 0
         var previous: GeoPoint?
-        for p in track {
+        let step = max(radius * 0.5, 10)
+        let minSpacing = max(radius * 0.25, 5)
+        for (i, p) in track.enumerated() {
             if let a = previous {
                 let d = Self.distance(a, p)
-                let step = max(radius * 0.5, 10)
+                if d < minSpacing && i < track.count - 1 { continue }
                 if d > step, d <= Self.maxInterpolationGapMeters {
                     let steps = Int(d / step)
                     for s in 1..<max(steps, 1) {
                         let t = Double(s) / Double(steps)
                         added += reveal(GeoPoint(latitude: a.latitude + (p.latitude - a.latitude) * t,
-                                                 longitude: a.longitude + (p.longitude - a.longitude) * t), radius: radius)
+                                                 longitude: a.longitude + (p.longitude - a.longitude) * t),
+                                        radius: radius, bounds: &bounds)
                     }
                 }
             }
-            added += reveal(p, radius: radius)
+            added += reveal(p, radius: radius, bounds: &bounds)
             previous = p
         }
         return added
@@ -102,20 +125,30 @@ public struct FogGrid: Sendable, Equatable {
 
     // MARK: - Mask for rendering
 
+    /// Pixel size of a cell and its stamped disc (radius + soft edge) on a tile at `zoom`.
+    static func stampGeometry(zoom: Int, size: Int, edgeSoftness: Double) -> (cellPx: Double, radius: Double, soft: Double) {
+        let cellPx = Double(size) * pow(2.0, Double(zoom - Self.cellZoom))
+        return (cellPx, max(cellPx * 0.75, 1.0), min(edgeSoftness, max(1.5, cellPx * 1.5)))
+    }
+
+    /// How many cells beyond a tile's edge can still change its pixels.
+    public static func marginCells(zoom: Int, size: Int, edgeSoftness: Double) -> Int {
+        let g = stampGeometry(zoom: zoom, size: size, edgeSoftness: edgeSoftness)
+        return Int(ceil((g.radius + g.soft) / g.cellPx)) + 1
+    }
+
     /// Coverage for one tile: 1 = explored, 0 = fog, soft in between. `size`×`size`, row-major.
     public func coverage(for tile: TileID, size: Int = WebMercator.tileSize, edgeSoftness: Double) -> [Float] {
         var mask = [Float](repeating: 0, count: size * size)
         guard !cells.isEmpty else { return mask }
 
-        let cellPx = Double(size) * pow(2.0, Double(tile.z - Self.cellZoom))
-        let radius = max(cellPx * 0.75, 1.0)
-        let soft = min(edgeSoftness, max(1.5, cellPx * 1.5))
+        let (cellPx, radius, soft) = Self.stampGeometry(zoom: tile.z, size: size, edgeSoftness: edgeSoftness)
         let reach = radius + soft
 
         // Cell index range that can touch this tile.
         let zoomDiff = tile.z - Self.cellZoom
         let tileX0 = Double(tile.x) * Double(size), tileY0 = Double(tile.y) * Double(size)
-        let marginCells = Int(ceil(reach / cellPx)) + 1
+        let marginCells = Self.marginCells(zoom: tile.z, size: size, edgeSoftness: edgeSoftness)
         let cx0 = Int(floor(tileX0 / cellPx)) - marginCells
         let cy0 = Int(floor(tileY0 / cellPx)) - marginCells
         let span = (zoomDiff >= 0 ? 1 : 1 << -zoomDiff) + 2 * marginCells
@@ -199,9 +232,62 @@ private func readLE32(_ b: [UInt8], _ o: Int) -> UInt32 {
     UInt32(b[o]) | UInt32(b[o + 1]) << 8 | UInt32(b[o + 2]) << 16 | UInt32(b[o + 3]) << 24
 }
 
+/// Inclusive bounding box of z18 fog cells, used to find the tiles a change touches.
+public struct CellRect: Sendable, Equatable {
+    public var minX: Int
+    public var minY: Int
+    public var maxX: Int
+    public var maxY: Int
+
+    public init(minX: Int, minY: Int, maxX: Int, maxY: Int) {
+        self.minX = minX
+        self.minY = minY
+        self.maxX = maxX
+        self.maxY = maxY
+    }
+
+    /// Bounds of the given cell keys, or nil if there are none.
+    public init?(covering keys: some Sequence<UInt64>) {
+        var r: CellRect?
+        for key in keys {
+            let (x, y) = FogGrid.coords(key)
+            r.include(x: x, y: y)
+        }
+        guard let r else { return nil }
+        self = r
+    }
+
+    public func union(_ o: CellRect) -> CellRect {
+        CellRect(minX: min(minX, o.minX), minY: min(minY, o.minY), maxX: max(maxX, o.maxX), maxY: max(maxY, o.maxY))
+    }
+
+    /// Whether cells in this rect can change pixels of `tile`, given how far fog edges reach (`marginCells`).
+    public func intersects(tile: TileID, marginCells: Int) -> Bool {
+        let d = FogGrid.cellZoom - tile.z
+        let tx0, ty0, tx1, ty1: Int
+        if d >= 0 {
+            tx0 = tile.x << d; ty0 = tile.y << d
+            tx1 = ((tile.x + 1) << d) - 1; ty1 = ((tile.y + 1) << d) - 1
+        } else {
+            tx0 = tile.x >> -d; ty0 = tile.y >> -d
+            tx1 = tx0; ty1 = ty0
+        }
+        return minX <= tx1 + marginCells && maxX >= tx0 - marginCells
+            && minY <= ty1 + marginCells && maxY >= ty0 - marginCells
+    }
+}
+
+extension Optional where Wrapped == CellRect {
+    mutating func include(x: Int, y: Int) {
+        let cell = CellRect(minX: x, minY: y, maxX: x, maxY: y)
+        self = self?.union(cell) ?? cell
+    }
+}
+
 /// How unexplored areas are drawn.
 public enum FogStyle: String, Codable, CaseIterable, Sendable {
-    /// Blank parchment, like an uncharted region on the Morrowind map.
+    /// Parchment over the map, like an uncharted region on the Morrowind map
+    /// (`fog.hiddenOpacity` sets how much terrain shows through).
     case hidden
     /// The map is still visible but grayed out and darkened.
     case grayed
@@ -224,7 +310,8 @@ public enum FogCompositor {
                 switch style {
                 case .hidden:
                     let n = hashNoise(originX &+ UInt32(x), originY &+ UInt32(y))
-                    fog = p.fogHidden.scaled(1 + p.noiseAmplitude * (n - 0.5) * 2)
+                    let parchment = p.fogHidden.scaled(1 + p.noiseAmplitude * (n - 0.5) * 2)
+                    fog = RGB.lerp(c, parchment, p.fog.hiddenOpacity)
                 case .grayed:
                     let (r, g, b) = c.components
                     let gray = (r + g + b) / 3

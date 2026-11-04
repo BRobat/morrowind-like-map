@@ -25,29 +25,38 @@ public final class HealthKitRouteImporter: @unchecked Sendable {
         try await store.requestAuthorization(toShare: [], read: types)
     }
 
+    /// Routes handed to the handler at once: few enough that a long first import still shows
+    /// progress, many enough that saving and syncing the fog doesn't happen per route.
+    public var batchSize = 50
+
     /// Imports all workouts added since the last call (the first call imports the whole history).
-    /// `handler` is called once per route with its points; return value is the number of routes.
+    /// `handler` is called with batches of routes (each a list of points); return value is the number of routes.
     @discardableResult
-    public func importNewWorkouts(_ handler: @escaping @Sendable ([GeoPoint]) async -> Void) async throws -> Int {
+    public func importNewWorkouts(_ handler: @escaping @Sendable ([[GeoPoint]]) async -> Void) async throws -> Int {
         let descriptor = HKAnchoredObjectQueryDescriptor(predicates: [.workout()], anchor: loadAnchor())
         let result = try await descriptor.result(for: store)
         var imported = 0
+        var batch: [[GeoPoint]] = []
         for workout in result.addedSamples {
             for route in try await routes(of: workout) {
                 let points = try await locations(of: route)
-                if !points.isEmpty {
-                    await handler(points)
-                    imported += 1
+                guard !points.isEmpty else { continue }
+                batch.append(points)
+                imported += 1
+                if batch.count >= batchSize {
+                    await handler(batch)
+                    batch.removeAll()
                 }
             }
         }
+        if !batch.isEmpty { await handler(batch) }
         saveAnchor(result.newAnchor)
         return imported
     }
 
     /// Wakes the app when HealthKit gets a new workout (also in the background on iOS),
     /// then imports it. Requires the HealthKit background-delivery entitlement.
-    public func startObserving(_ handler: @escaping @Sendable ([GeoPoint]) async -> Void) {
+    public func startObserving(_ handler: @escaping @Sendable ([[GeoPoint]]) async -> Void) {
         guard observer == nil else { return }
         let query = HKObserverQuery(sampleType: HKObjectType.workoutType(), predicate: nil) { [weak self] _, completion, error in
             guard let self, error == nil else { completion(); return }
@@ -59,6 +68,11 @@ public final class HealthKitRouteImporter: @unchecked Sendable {
         observer = query
         store.execute(query)
         store.enableBackgroundDelivery(for: HKObjectType.workoutType(), frequency: .immediate) { _, _ in }
+    }
+
+    /// True once a full import has finished, which also means Health access was requested before.
+    public var hasImportedBefore: Bool {
+        FileManager.default.fileExists(atPath: anchorURL.path)
     }
 
     public func resetAnchor() {

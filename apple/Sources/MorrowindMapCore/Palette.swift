@@ -33,6 +33,8 @@ public struct Palette: Codable, Sendable {
 
     public struct Fog: Codable, Sendable {
         public var hiddenColor: String
+        /// How much of the terrain the `hidden` fog covers: 1 = solid parchment, lower lets the map show through.
+        public var hiddenOpacity: Double
         public var grayedDesaturation: Double
         public var grayedDarken: Double
         public var edgeSoftnessPx: Double

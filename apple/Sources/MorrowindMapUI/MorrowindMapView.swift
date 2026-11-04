@@ -47,7 +47,7 @@ public struct MorrowindMapView: View {
             }
             #endif
             .task(id: RequestKey(tiles: visible.compactMap { $0.tile.normalized }, revision: fog.revision, style: fog.style)) {
-                tiles.request(visible.compactMap { $0.tile.normalized }, fog: fog.grid, revision: fog.revision, style: fog.style)
+                tiles.request(visible.compactMap { $0.tile.normalized }, fog: fog)
             }
         }
         #if os(watchOS)
@@ -67,8 +67,7 @@ public struct MorrowindMapView: View {
 
     private func drawTiles(_ visible: [(tile: TileID, x: Double, y: Double, side: Double)], in ctx: inout GraphicsContext) {
         for v in visible {
-            guard let id = v.tile.normalized, let found = tiles.image(for: id) else { continue }
-            let img = found.crop.width < Double(found.image.width) ? found.image.cropping(to: found.crop) ?? found.image : found.image
+            guard let id = v.tile.normalized, let img = tiles.drawableImage(for: id) else { continue }
             // Slight overlap hides hairline seams between scaled tiles.
             let rect = CGRect(x: v.x, y: v.y, width: v.side, height: v.side).insetBy(dx: -0.25, dy: -0.25)
             ctx.draw(Image(decorative: img, scale: 1), in: rect)

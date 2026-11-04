@@ -12,10 +12,12 @@ moved between devices and merged.
   data is a set union. Union is commutative, associative and idempotent, so sync needs no conflict
   resolution.
 - **Revealing a point** marks every cell whose centre is within `R` meters of the point (default
-  `R = 100 m`, user-configurable), always including the cell that holds the point.
-- **Revealing a track** reveals each point. Where two consecutive points are more than `max(R/2, 10 m)`
-  apart but no more than **2 km** apart, intermediate points are interpolated linearly every
-  `max(R/2, 10 m)`. Longer gaps (GPS dropouts, ferries, flights) are left unrevealed.
+  `R = 250 m`, user-configurable), always including the cell that holds the point.
+- **Revealing a track** reveals each point. Implementations may skip a point that is closer than
+  `max(R/4, 5 m)` to the last revealed point (except the track's last point), which loses at most a
+  few edge cells on dense 1 Hz recordings. Where two consecutive revealed points are more than
+  `max(R/2, 10 m)` apart but no more than **2 km** apart, intermediate points are interpolated
+  linearly every `max(R/2, 10 m)`. Longer gaps (GPS dropouts, ferries, flights) are left unrevealed.
 - GPS points with a horizontal accuracy worse than 50 m are discarded when the accuracy is known.
 
 ## Binary file (`*.mwfog`)
@@ -47,7 +49,8 @@ For a tile at zoom `z`, rendered at `S` px per side:
   `soft = min(edgeSoftnessPx, max(1.5, 1.5 · cellPx))` px. Inside the disc coverage is 1; it drops to 0 at `r + soft`.
 - Coverage is the maximum over all discs.
 - The final pixel is `lerp(fogColor, base, coverage)`, where `fogColor` depends on the style:
-  - `hidden`: `fog.hiddenColor` with the same parchment grain as the map,
+  - `hidden`: `fog.hiddenColor` with the same parchment grain as the map, laid over the base pixel at
+    `fog.hiddenOpacity` (1 = solid parchment, lower lets the terrain show through),
   - `grayed`: the base pixel desaturated by `fog.grayedDesaturation` and darkened by `fog.grayedDarken`.
 
 All parameters are in `palette.json`.

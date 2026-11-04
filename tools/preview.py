@@ -173,6 +173,7 @@ def main():
         if args.fog_style == "hidden":
             hidden = hex_rgb(fog["hiddenColor"]) * (1 + pal["parchment"]["noiseAmplitude"] *
                      (hash_noise(*np.mgrid[0:dem.shape[1], 0:dem.shape[0]][::-1].astype(np.uint32)) - 0.5) * 2)[..., None]
+            hidden = img + (hidden - img) * fog["hiddenOpacity"]
         else:
             gray = img.mean(axis=-1, keepdims=True)
             hidden = (img * (1 - fog["grayedDesaturation"]) + gray * fog["grayedDesaturation"]) * (1 - fog["grayedDarken"])

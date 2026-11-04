@@ -56,7 +56,7 @@ struct ContentView: View {
         .sheet(isPresented: $showSettings) { SettingsView(model: model, fog: model.fog) }
         .fileImporter(isPresented: $showGPXPicker, allowedContentTypes: [UTType(filenameExtension: "gpx") ?? .xml],
                       allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result { model.importGPX(from: urls) }
+            if case .success(let urls) = result { Task { await model.importGPX(from: urls) } }
         }
     }
 
@@ -83,12 +83,12 @@ struct SettingsView: View {
             Form {
                 Section("Fog of war") {
                     Picker("Unexplored areas", selection: $fog.style) {
-                        Text("Hidden (blank parchment)").tag(FogStyle.hidden)
+                        Text("Parchment (terrain shows faintly)").tag(FogStyle.hidden)
                         Text("Grayed out").tag(FogStyle.grayed)
                     }
                     VStack(alignment: .leading) {
                         Text("Reveal radius: \(Int(fog.revealRadiusMeters)) m")
-                        Slider(value: $fog.revealRadiusMeters, in: 25...500, step: 25)
+                        Slider(value: $fog.revealRadiusMeters, in: 50...1000, step: 50)
                     }
                     Text("Applies to newly imported routes. Use “Re-import all workouts” to apply it to your history.")
                         .font(.footnote).foregroundStyle(.secondary)

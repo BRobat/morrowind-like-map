@@ -3,6 +3,9 @@ import Foundation
 /// Renders one Morrowind-style base tile (no fog) into an RGBA buffer.
 /// The algorithm is described in shared/render-spec.md and mirrored by tools/preview.py.
 public struct TileRenderer: Sendable {
+    /// Bump when the rendering code changes, so tiles cached on disk are rendered again.
+    public static let version = 1
+
     public let palette: Palette
     private let resolved: ResolvedPalette
     public let size: Int
@@ -32,6 +35,21 @@ public struct TileRenderer: Sendable {
     ///   - elevation: elevation for exactly this tile, `size`×`size`.
     ///   - water: OpenMapTiles water data. When nil (offline / not yet loaded), anything at or
     ///     below sea level in the elevation data is treated as water.
+    /// Identifies what a rendered tile looks like: renderer version, size and palette.
+    /// Used as the folder name for the rendered-tile disk cache.
+    public var cacheKey: String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let bytes = (try? encoder.encode(palette)) ?? Data()
+        // FNV-1a: stable across launches, unlike Swift's Hasher.
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for b in bytes {
+            hash ^= UInt64(b)
+            hash &*= 0x0000_0100_0000_01b3
+        }
+        return "v\(Self.version)-\(size)-\(String(hash, radix: 16))"
+    }
+
     public func render(tile: TileID, elevation: ElevationGrid, water: WaterSource?) -> RGBAImage {
         precondition(elevation.width == size && elevation.height == size)
         let isWater = water.map { waterMask(tile: tile, source: $0) } ?? seaLevelMask(elevation)

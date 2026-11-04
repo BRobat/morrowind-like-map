@@ -31,6 +31,16 @@ public enum ImageCodec {
         return RGBAImage(width: w, height: h, pixels: px)
     }
 
+    /// PNG bytes for an RGBA buffer (used for the rendered-tile disk cache).
+    public static func png(from image: RGBAImage) -> Data? {
+        guard let cg = cgImage(from: image) else { return nil }
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data as CFMutableData, "public.png" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, cg, nil)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return data as Data
+    }
+
     public static func cgImage(from image: RGBAImage) -> CGImage? {
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
               let provider = CGDataProvider(data: Data(image.pixels) as CFData) else { return nil }

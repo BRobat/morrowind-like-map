@@ -41,19 +41,23 @@ final class WatchModel {
         player = location.point
         location.onChange = { [weak self] p in self?.player = p }
         sync = FogSync(store: fog)
+        // Registered at launch so a background wake-up for a new workout isn't lost.
+        if healthKit?.hasImportedBefore == true { healthKit?.startObserving(reveal) }
+    }
+
+    private var reveal: @Sendable ([[GeoPoint]]) async -> Void {
+        let fog = self.fog
+        return { routes in _ = await fog.reveal(tracks: routes) }
     }
 
     func onLaunch() async {
         location.requestPermissionIfNeeded()
         guard let healthKit else { return }
-        let fog = self.fog
-        let reveal: @Sendable ([GeoPoint]) async -> Void = { points in
-            await MainActor.run { _ = fog.reveal(track: points) }
-        }
         do {
             try await healthKit.requestAuthorization()
-            healthKit.startObserving(reveal)
+            // Import before observing: the observer fires once on start and must see the saved anchor.
             try await healthKit.importNewWorkouts(reveal)
+            healthKit.startObserving(reveal)
         } catch {
             // Without Health access the watch still shows what the phone syncs.
         }

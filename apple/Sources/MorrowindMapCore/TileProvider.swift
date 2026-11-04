@@ -56,18 +56,39 @@ public final class TileProvider: @unchecked Sendable {
     private let fetcher: TileFetcher
     private let decoded = DecodedCache()
     private let waterTemplate = WaterTemplate()
+    /// Rendered base tiles as PNGs, so relaunches don't decode and render terrain again.
+    private let renderedDirectory: URL
 
-    public init(renderer: TileRenderer = TileRenderer(), fetcher: TileFetcher = TileFetcher()) {
+    /// - Parameter renderedCacheDirectory: where rendered base tiles are kept; defaults to
+    ///   `Caches/tiles/rendered/<renderer.cacheKey>` (the system may purge it, which only costs a re-render).
+    public init(renderer: TileRenderer = TileRenderer(), fetcher: TileFetcher = TileFetcher(), renderedCacheDirectory: URL? = nil) {
         self.renderer = renderer
         self.fetcher = fetcher
+        self.renderedDirectory = renderedCacheDirectory
+            ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("tiles/rendered/\(renderer.cacheKey)")
     }
 
     /// The base map for a tile without fog.
     public func baseTile(_ tile: TileID) async throws -> RGBAImage {
+        let file = renderedDirectory.appendingPathComponent("\(tile.z)/\(tile.x)/\(tile.y).png")
+        if let data = try? Data(contentsOf: file), let img = ImageCodec.decode(data),
+           img.width == renderer.size, img.height == renderer.size {
+            return img
+        }
         async let demTask = elevation(for: tile)
         async let waterTask = water(for: tile)
         let (dem, w) = try await (demTask, waterTask)
-        return renderer.render(tile: tile, elevation: dem, water: w)
+        let img = renderer.render(tile: tile, elevation: dem, water: w)
+        // Without water vectors (offline) the renderer guesses water from elevation; don't keep that guess.
+        if w != nil {
+            Task.detached(priority: .utility) {
+                guard let png = ImageCodec.png(from: img) else { return }
+                try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? png.write(to: file, options: .atomic)
+            }
+        }
+        return img
     }
 
     /// The base map with fog of war composited on top.

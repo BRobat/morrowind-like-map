@@ -183,6 +183,15 @@ final class FogTests: XCTestCase {
         XCTAssertEqual(out[0, 0], RGB(10, 20, 30))
         XCTAssertNotEqual(out[1, 0], RGB(10, 20, 30))
     }
+
+    func testHiddenFogLetsTerrainShowThrough() {
+        // Same fogged pixel over dark and light terrain: with hiddenOpacity < 1 the results differ.
+        let tile = TileID(z: 1, x: 0, y: 0)
+        let dark = FogCompositor.apply(to: RGBAImage(width: 1, height: 1, fill: RGB(0, 0, 0)), coverage: [0], style: .hidden, tile: tile)
+        let light = FogCompositor.apply(to: RGBAImage(width: 1, height: 1, fill: RGB(255, 255, 255)), coverage: [0], style: .hidden, tile: tile)
+        XCTAssertLessThan(Palette.standard.fog.hiddenOpacity, 1)
+        XCTAssertNotEqual(dark[0, 0], light[0, 0])
+    }
 }
 
 final class GPXTests: XCTestCase {
@@ -224,5 +233,82 @@ final class PaletteTests: XCTestCase {
         let water = img[4, 1], land = img[4, 6]
         XCTAssertGreaterThan(Int(water.b), Int(water.r), "water should be blue")
         XCTAssertGreaterThan(Int(land.r), Int(land.b), "land should be brown")
+    }
+}
+
+final class PerformanceBehaviourTests: XCTestCase {
+    /// A 2 km track sampled every 2 m, like a 1 Hz recording at walking pace.
+    private func denseTrack() -> [GeoPoint] {
+        (0...1000).map { i in GeoPoint(latitude: 50.06 + Double(i) * 0.000018, longitude: 19.94 + Double(i) * 0.0000005) }
+    }
+
+    func testThinnedTrackRevealsAlmostTheSameCells() {
+        let track = denseTrack()
+        // Reference: every point stamped, as before thinning.
+        var reference = FogGrid()
+        for p in track { reference.reveal(p, radius: 250) }
+        var thinned = FogGrid()
+        thinned.reveal(track: track, radius: 250)
+
+        let common = thinned.cells.intersection(reference.cells).count
+        XCTAssertGreaterThanOrEqual(Double(common) / Double(reference.count), 0.98)
+        XCTAssertTrue(thinned.isExplored(track.first!))
+        XCTAssertTrue(thinned.isExplored(track.last!))
+    }
+
+    func testRevealBoundsCoverEveryNewCell() {
+        var grid = FogGrid()
+        var bounds: CellRect?
+        grid.reveal(track: denseTrack(), radius: 250, bounds: &bounds)
+        let b = try! XCTUnwrap(bounds)
+        for key in grid.cells {
+            let (x, y) = FogGrid.coords(key)
+            XCTAssertTrue(x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY)
+        }
+        XCTAssertEqual(CellRect(covering: grid.cells), b)
+    }
+
+    func testCellRectIntersectsTiles() {
+        // Tile 10/5/7 covers z18 cells x 1280...1535, y 1792...2047.
+        let tile = TileID(z: 10, x: 5, y: 7)
+        XCTAssertTrue(CellRect(minX: 1535, minY: 2047, maxX: 1535, maxY: 2047).intersects(tile: tile, marginCells: 0))
+        XCTAssertFalse(CellRect(minX: 1536, minY: 1800, maxX: 1540, maxY: 1800).intersects(tile: tile, marginCells: 0))
+        XCTAssertTrue(CellRect(minX: 1536, minY: 1800, maxX: 1540, maxY: 1800).intersects(tile: tile, marginCells: 1))
+        // Above z18 a tile sits inside one cell.
+        let deep = TileID(z: 19, x: 2 * 1300 + 1, y: 2 * 1900)
+        XCTAssertTrue(CellRect(minX: 1300, minY: 1900, maxX: 1300, maxY: 1900).intersects(tile: deep, marginCells: 0))
+        XCTAssertFalse(CellRect(minX: 1301, minY: 1900, maxX: 1301, maxY: 1900).intersects(tile: deep, marginCells: 0))
+    }
+
+    @MainActor
+    func testBatchRevealMatchesSequentialAndTracksChanges() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let tracks = [denseTrack(), [GeoPoint(latitude: 46.0, longitude: 7.75), GeoPoint(latitude: 46.001, longitude: 7.751)]]
+
+        let batched = FogStore(fileURL: dir.appendingPathComponent("a.mwfog"))
+        batched.revealRadiusMeters = 250
+        let r0 = batched.revision
+        let added = await batched.reveal(tracks: tracks)
+
+        var sequential = FogGrid()
+        for t in tracks { sequential.reveal(track: t, radius: 250) }
+        XCTAssertEqual(batched.grid, sequential)
+        XCTAssertEqual(added, sequential.count)
+        XCTAssertEqual(batched.revision, r0 + 1, "one commit for the whole batch")
+
+        guard case .rect(let r) = batched.dirty(since: r0) else { return XCTFail("expected a rect") }
+        XCTAssertEqual(r, CellRect(covering: sequential.cells))
+        XCTAssertEqual(batched.dirty(since: batched.revision), .none)
+        batched.reset()
+        XCTAssertEqual(batched.dirty(since: r0), .all)
+    }
+
+    func testPNGRoundTrip() throws {
+        var img = RGBAImage(width: 4, height: 3, fill: RGB(10, 20, 30))
+        img[1, 2] = RGB(200, 150, 100)
+        img[3, 0] = RGB(255, 0, 7)
+        let png = try XCTUnwrap(ImageCodec.png(from: img))
+        XCTAssertEqual(ImageCodec.decode(png), img)
     }
 }

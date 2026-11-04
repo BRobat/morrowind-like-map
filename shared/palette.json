@@ -32,6 +32,7 @@
   },
   "fog": {
     "hiddenColor": "#D8C8A2",
+    "hiddenOpacity": 0.75,
     "grayedDesaturation": 1.0,
     "grayedDarken": 0.25,
     "edgeSoftnessPx": 6

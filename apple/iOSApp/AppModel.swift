@@ -25,6 +25,9 @@ final class AppModel {
         player = location.point
         location.onChange = { [weak self] p in self?.player = p }
         sync = FogSync(store: fog)
+        // The model is created at process launch, also when HealthKit wakes the app in the
+        // background, where no view appears. Register the observer here so that wake-up isn't lost.
+        if healthKit?.hasImportedBefore == true { startObserving() }
     }
 
     func onLaunch() async {
@@ -32,13 +35,19 @@ final class AppModel {
         guard let healthKit else { return }
         do {
             try await healthKit.requestAuthorization()
-            let fog = self.fog
-            healthKit.startObserving { points in
-                await MainActor.run { _ = fog.reveal(track: points) }
-            }
+            // Import first: the observer fires once on start, and must see the saved anchor
+            // or it would re-import the whole history in parallel.
             await importWorkouts()
+            startObserving()
         } catch {
             status = "Health access failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func startObserving() {
+        let fog = self.fog
+        healthKit?.startObserving { routes in
+            _ = await fog.reveal(tracks: routes)
         }
     }
 
@@ -53,8 +62,8 @@ final class AppModel {
         let fog = self.fog
         do {
             let before = fog.grid.count
-            let n = try await healthKit.importNewWorkouts { points in
-                await MainActor.run { _ = fog.reveal(track: points) }
+            let n = try await healthKit.importNewWorkouts { routes in
+                _ = await fog.reveal(tracks: routes)
             }
             status = n == 0 ? "No new workouts" : "Imported \(n) routes, \(fog.grid.count - before) new cells explored"
         } catch {
@@ -69,19 +78,16 @@ final class AppModel {
         await importWorkouts()
     }
 
-    func importGPX(from urls: [URL]) {
-        var routes = 0
-        let before = fog.grid.count
+    func importGPX(from urls: [URL]) async {
+        var tracks: [[GeoPoint]] = []
         for url in urls {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             guard let data = try? Data(contentsOf: url) else { continue }
-            for track in GPXParser.tracks(from: data) {
-                fog.reveal(track: track)
-                routes += 1
-            }
+            tracks += GPXParser.tracks(from: data)
         }
-        status = "Imported \(routes) GPX tracks, \(fog.grid.count - before) new cells explored"
+        let added = await fog.reveal(tracks: tracks)
+        status = "Imported \(tracks.count) GPX tracks, \(added) new cells explored"
     }
 
     func centerOnPlayer() {
