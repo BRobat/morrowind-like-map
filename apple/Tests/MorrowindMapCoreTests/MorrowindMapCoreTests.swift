@@ -562,5 +562,11 @@ final class RoadTests: XCTestCase {
             XCTAssertEqual(withRoads[0, 0], roadColor, "explored: full road ink")
             XCTAssertEqual(withRoads[1, 0], without[1, 0], "fog: no trace of the road (\(style))")
         }
+        // "Everywhere": the road is under the fog too, so the fogged pixel differs from plain terrain.
+        let everywhere = FogCompositor.apply(to: base, coverage: [1, 0], style: .grayed, palette: palette, tile: tile,
+                                             roads: [255, 255], roadsEverywhere: true)
+        let plain = FogCompositor.apply(to: base, coverage: [1, 0], style: .grayed, palette: palette, tile: tile)
+        XCTAssertEqual(everywhere[0, 0], roadColor)
+        XCTAssertNotEqual(everywhere[1, 0], plain[1, 0])
     }
 }

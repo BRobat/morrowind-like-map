@@ -130,9 +130,11 @@ public final class TileProvider: @unchecked Sendable {
         return Self.applyFog(base, tile: tile, fog: fog, style: style, palette: renderer.palette)
     }
 
-    public static func applyFog(_ base: BaseTile, tile: TileID, fog: FogGrid, style: FogStyle, palette: Palette) -> RGBAImage {
+    public static func applyFog(_ base: BaseTile, tile: TileID, fog: FogGrid, style: FogStyle, palette: Palette,
+                                roads: RoadVisibility = .explored) -> RGBAImage {
         let coverage = fog.coverage(for: tile, size: base.image.width, edgeSoftness: palette.fog.edgeSoftnessPx)
-        return FogCompositor.apply(to: base.image, coverage: coverage, style: style, palette: palette, tile: tile, roads: base.roads)
+        return FogCompositor.apply(to: base.image, coverage: coverage, style: style, palette: palette, tile: tile,
+                                   roads: roads == .off ? nil : base.roads, roadsEverywhere: roads == .everywhere)
     }
 
     // MARK: - Inputs

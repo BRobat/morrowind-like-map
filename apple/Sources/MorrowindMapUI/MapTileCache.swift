@@ -28,6 +28,7 @@ public final class MapTileCache {
     @ObservationIgnored private weak var fog: FogStore?
     @ObservationIgnored private var revision: Int?
     @ObservationIgnored private var style: FogStyle?
+    @ObservationIgnored private var roads: RoadVisibility?
     @ObservationIgnored private let baseLimit: Int
     @ObservationIgnored private let maxConcurrent: Int
 
@@ -46,9 +47,10 @@ public final class MapTileCache {
     /// Tiles from earlier calls that are no longer listed are not started.
     public func request(_ tiles: [TileID], fog: FogStore) {
         self.fog = fog
-        if style != fog.style {
+        if style != fog.style || roads != fog.roadVisibility {
             invalidate(.all)
             style = fog.style
+            roads = fog.roadVisibility
         } else if let old = revision, old != fog.revision {
             invalidate(fog.dirty(since: old))
         }
@@ -123,21 +125,21 @@ public final class MapTileCache {
         let base = bases[tile]
         let provider = self.provider
         let palette = provider.renderer.palette
-        let grid = fog.grid, style = fog.style, revision = fog.revision
+        let grid = fog.grid, style = fog.style, revision = fog.revision, roads = fog.roadVisibility
         Task.detached(priority: .userInitiated) {
             do {
                 let b: BaseTile
                 if let base { b = base } else { b = try await provider.baseTile(tile) }
-                let composed = TileProvider.applyFog(b, tile: tile, fog: grid, style: style, palette: palette)
+                let composed = TileProvider.applyFog(b, tile: tile, fog: grid, style: style, palette: palette, roads: roads)
                 let cg = ImageCodec.cgImage(from: composed)
-                await self.finish(tile, base: b, image: cg, revision: revision, style: style)
+                await self.finish(tile, base: b, image: cg, revision: revision, style: style, roads: roads)
             } catch {
                 await self.fail(tile)
             }
         }
     }
 
-    private func finish(_ tile: TileID, base: BaseTile, image: CGImage?, revision: Int, style: FogStyle) {
+    private func finish(_ tile: TileID, base: BaseTile, image: CGImage?, revision: Int, style: FogStyle, roads: RoadVisibility) {
         pending.remove(tile)
         failed[tile] = image == nil ? Date() : nil
         if bases[tile] == nil {
@@ -153,7 +155,7 @@ public final class MapTileCache {
         }
         // An image composed against an older fog state is still right if no change since touched the tile.
         // Otherwise it's dropped and `pump` redoes the (cheap) composite from the cached base.
-        if let fog, let image, style == fog.style,
+        if let fog, let image, style == fog.style, roads == fog.roadVisibility,
            revision == fog.revision || !fog.dirty(since: revision).affects(tile, marginCells: marginCells(tile)) {
             images[tile] = image
             staleImages[tile] = nil

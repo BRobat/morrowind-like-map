@@ -10,9 +10,9 @@ public enum RoadGroup: Int, CaseIterable, Sendable {
         switch self {
         case .major: return 0.95
         case .medium: return 0.85
-        case .minor: return 0.7
-        case .track: return 0.6
-        case .path: return 0.5
+        case .minor: return 0.8
+        case .track: return 0.7
+        case .path: return 0.65
         }
     }
 
@@ -25,13 +25,22 @@ public enum RoadGroup: Int, CaseIterable, Sendable {
         case "primary": return z < 8 ? nil : (.major, min(0.8 + 0.3 * (d - 8), 3.5))
         case "secondary": return z < 9 ? nil : (.medium, min(0.7 + 0.25 * (d - 9), 3))
         case "tertiary": return z < 10 ? nil : (.medium, min(0.6 + 0.25 * (d - 10), 2.5))
-        case "minor": return z < 12 ? nil : (.minor, min(0.6 + 0.2 * (d - 12), 2))
-        case "service": return z < 14 ? nil : (.minor, min(0.5 + 0.2 * (d - 14), 1.5))
-        case "track": return z < 12 ? nil : (.track, min(0.5 + 0.15 * (d - 12), 1.2))
-        case "path": return z < 13 ? nil : (.path, min(0.5 + 0.15 * (d - 13), 1.2))
+        case "minor": return z < 12 ? nil : (.minor, min(0.9 + 0.25 * (d - 12), 2.2))
+        case "service": return z < 14 ? nil : (.minor, min(0.7 + 0.2 * (d - 14), 1.6))
+        case "track": return z < 12 ? nil : (.track, min(0.8 + 0.15 * (d - 12), 1.5))
+        case "path": return z < 13 ? nil : (.path, min(0.8 + 0.15 * (d - 13), 1.5))
         default: return nil
         }
     }
+}
+
+/// Where roads are drawn.
+public enum RoadVisibility: String, Codable, CaseIterable, Sendable {
+    /// Only in explored areas, fading out with the fog edge (default).
+    case explored
+    /// Everywhere, also under the fog (the fog then tints them like the terrain).
+    case everywhere
+    case off
 }
 
 /// A rendered base tile: the terrain image plus the road layer that sits on top of it once explored.

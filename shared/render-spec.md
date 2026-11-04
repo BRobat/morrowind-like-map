@@ -56,10 +56,10 @@ Tiles are 256 px Web Mercator XYZ tiles.
    | `primary` | 8 | `min(0.8 + 0.3·(z−8), 3.5)` | major (0.95) |
    | `secondary` | 9 | `min(0.7 + 0.25·(z−9), 3)` | medium (0.85) |
    | `tertiary` | 10 | `min(0.6 + 0.25·(z−10), 2.5)` | medium (0.85) |
-   | `minor` | 12 | `min(0.6 + 0.2·(z−12), 2)` | minor (0.7) |
-   | `service` | 14 | `min(0.5 + 0.2·(z−14), 1.5)` | minor (0.7) |
-   | `track` | 12 | `min(0.5 + 0.15·(z−12), 1.2)` | track (0.6) |
-   | `path` (footways, cycleways, trails) | 13 | `min(0.5 + 0.15·(z−13), 1.2)` | path (0.5) |
+   | `minor` | 12 | `min(0.9 + 0.25·(z−12), 2.2)` | minor (0.8) |
+   | `service` | 14 | `min(0.7 + 0.2·(z−14), 1.6)` | minor (0.8) |
+   | `track` | 12 | `min(0.8 + 0.15·(z−12), 1.5)` | track (0.7) |
+   | `path` (footways, cycleways, trails) | 13 | `min(0.8 + 0.15·(z−13), 1.5)` | path (0.65) |
 
    Downsample each group mask to coverage `n/4` (samples hit in the 2×2 block), multiply by the group
    opacity and `roads.opacity`, and keep the maximum over groups: `road ∈ [0, 1]` per pixel.
@@ -69,6 +69,8 @@ Tiles are 256 px Web Mercator XYZ tiles.
    - `explored = lerp(base, roads.color, road)`
    - `fog` is computed from `base`, **not** `explored`, so roads never show through the fog.
    - `out = lerp(fog, explored, a)`: roads appear only in explored areas and fade out with the fog edge.
+   - User setting `roadVisibility`: `explored` (default, as above), `everywhere` (compute `fog` from
+     `explored` too, so roads show under the fog, tinted like the terrain), `off` (no road layer).
 9. **Waypoints** (towns, villages, POIs) are drawn as a vector overlay above the tiles, not baked into
    them, so labels stay sharp and can cross tile edges. See [`waypoints-spec.md`](waypoints-spec.md).
 

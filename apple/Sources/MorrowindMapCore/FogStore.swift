@@ -33,6 +33,11 @@ public final class FogStore {
         didSet { UserDefaults.standard.set(style.rawValue, forKey: Keys.style) }
     }
 
+    /// Where roads are drawn.
+    public var roadVisibility: RoadVisibility {
+        didSet { UserDefaults.standard.set(roadVisibility.rawValue, forKey: Keys.roads) }
+    }
+
     /// Which towns, villages and points of interest the map shows.
     public var placesVisibility: WaypointVisibility {
         didSet { UserDefaults.standard.set(placesVisibility.rawValue, forKey: Keys.places) }
@@ -52,6 +57,7 @@ public final class FogStore {
         static let radius = "fog.revealRadiusMeters"
         static let style = "fog.style"
         static let places = "map.placesVisibility"
+        static let roads = "map.roadVisibility"
     }
 
     public init(fileURL: URL? = nil) {
@@ -64,6 +70,8 @@ public final class FogStore {
         self.style = UserDefaults.standard.string(forKey: Keys.style).flatMap(FogStyle.init(rawValue:)) ?? .hidden
         self.placesVisibility = UserDefaults.standard.string(forKey: Keys.places)
             .flatMap(WaypointVisibility.init(rawValue:)) ?? .discovered
+        self.roadVisibility = UserDefaults.standard.string(forKey: Keys.roads)
+            .flatMap(RoadVisibility.init(rawValue:)) ?? .explored
     }
 
     /// Reveals along a recorded track. Returns the number of newly explored cells.

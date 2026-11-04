@@ -154,10 +154,10 @@ ROAD_CLASSES = {  # class: (minZoom, width(z), group opacity)
     "primary":   (8, lambda z: min(0.8 + 0.3 * (z - 8), 3.5), 0.95),
     "secondary": (9, lambda z: min(0.7 + 0.25 * (z - 9), 3), 0.85),
     "tertiary":  (10, lambda z: min(0.6 + 0.25 * (z - 10), 2.5), 0.85),
-    "minor":     (12, lambda z: min(0.6 + 0.2 * (z - 12), 2), 0.7),
-    "service":   (14, lambda z: min(0.5 + 0.2 * (z - 14), 1.5), 0.7),
-    "track":     (12, lambda z: min(0.5 + 0.15 * (z - 12), 1.2), 0.6),
-    "path":      (13, lambda z: min(0.5 + 0.15 * (z - 13), 1.2), 0.5),
+    "minor":     (12, lambda z: min(0.9 + 0.25 * (z - 12), 2.2), 0.8),
+    "service":   (14, lambda z: min(0.7 + 0.2 * (z - 14), 1.6), 0.8),
+    "track":     (12, lambda z: min(0.8 + 0.15 * (z - 12), 1.5), 0.7),
+    "path":      (13, lambda z: min(0.8 + 0.15 * (z - 13), 1.5), 0.65),
 }
 
 

@@ -55,7 +55,8 @@ public struct MorrowindMapView: View {
                 }
             }
             #endif
-            .task(id: RequestKey(tiles: visible.compactMap { $0.tile.normalized }, revision: fog.revision, style: fog.style)) {
+            .task(id: RequestKey(tiles: visible.compactMap { $0.tile.normalized }, revision: fog.revision, style: fog.style,
+                                   roads: fog.roadVisibility)) {
                 tiles.request(visible.compactMap { $0.tile.normalized }, fog: fog)
             }
             .task(id: placesVisibility == .off ? [] : dataTiles) {
@@ -75,6 +76,7 @@ public struct MorrowindMapView: View {
         var tiles: [TileID]
         var revision: Int
         var style: FogStyle
+        var roads: RoadVisibility
     }
 
     private func drawTiles(_ visible: [(tile: TileID, x: Double, y: Double, side: Double)], in ctx: inout GraphicsContext) {

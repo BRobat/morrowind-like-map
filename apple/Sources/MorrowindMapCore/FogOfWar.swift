@@ -294,11 +294,13 @@ public enum FogStyle: String, Codable, CaseIterable, Sendable {
 }
 
 public enum FogCompositor {
-    /// - Parameter roads: road ink coverage (0…255) per pixel. Roads are drawn only where the map is
-    ///   explored and fade out with the fog edge; the fog itself is computed from the terrain without roads,
-    ///   so they never show through `hidden` or `grayed` fog.
+    /// - Parameters:
+    ///   - roads: road ink coverage (0…255) per pixel. By default roads are drawn only where the map is
+    ///     explored and fade out with the fog edge; the fog is computed from the terrain without roads,
+    ///     so they never show through `hidden` or `grayed` fog.
+    ///   - roadsEverywhere: draw roads under the fog too (the fog then tints them like the terrain).
     public static func apply(to base: RGBAImage, coverage: [Float], style: FogStyle, palette: Palette = .standard,
-                             tile: TileID, roads: [UInt8]? = nil) -> RGBAImage {
+                             tile: TileID, roads: [UInt8]? = nil, roadsEverywhere: Bool = false) -> RGBAImage {
         let p = ResolvedPalette(palette)
         var out = base
         let size = base.width
@@ -310,10 +312,11 @@ public enum FogCompositor {
                 let a = Double(coverage[i])
                 // Fully explored and no road here: the base pixel is already right.
                 if a >= 1, (roads?[i] ?? 0) == 0 { continue }
-                let c = base[x, y]
+                var c = base[x, y]
                 var explored = c
-                if let roads, a > 0, roads[i] > 0 {
+                if let roads, a > 0 || roadsEverywhere, roads[i] > 0 {
                     explored = RGB.lerp(c, p.roadColor, Double(roads[i]) / 255)
+                    if roadsEverywhere { c = explored }
                 }
                 if a >= 1 {
                     out[x, y] = explored

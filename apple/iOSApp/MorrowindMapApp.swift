@@ -95,6 +95,15 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                     LabeledContent("Explored cells", value: "\(fog.grid.count)")
                 }
+                Section("Roads") {
+                    Picker("Roads", selection: $fog.roadVisibility) {
+                        Text("Explored areas only").tag(RoadVisibility.explored)
+                        Text("Everywhere").tag(RoadVisibility.everywhere)
+                        Text("Off").tag(RoadVisibility.off)
+                    }
+                    Text("Roads and paths show from zoom 12–13. In “Explored areas only” they appear within the reveal radius of your routes.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Section("Places") {
                     Picker("Towns and waypoints", selection: $fog.placesVisibility) {
                         Text("Discovered").tag(WaypointVisibility.discovered)

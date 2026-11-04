@@ -4,7 +4,7 @@ import Foundation
 /// The algorithm is described in shared/render-spec.md and mirrored by tools/preview.py.
 public struct TileRenderer: Sendable {
     /// Bump when the rendering code changes, so tiles cached on disk are rendered again.
-    public static let version = 2
+    public static let version = 3
 
     public let palette: Palette
     private let resolved: ResolvedPalette
