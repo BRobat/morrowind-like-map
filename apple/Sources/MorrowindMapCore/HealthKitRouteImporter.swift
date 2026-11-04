@@ -11,13 +11,19 @@ public final class HealthKitRouteImporter: @unchecked Sendable {
 
     private let store = HKHealthStore()
     private let anchorURL: URL
-    private var observer: HKObserverQuery?
+    private let legacyAnchorURL: URL
+    private var observers: [HKObserverQuery] = []
+    private let gate = ImportGate()
     /// Points less accurate than this are dropped (indoor starts, tunnels).
     public var maxHorizontalAccuracy: CLLocationAccuracy = 50
 
     public init(anchorURL: URL? = nil) {
-        self.anchorURL = anchorURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("healthkit-workout-anchor")
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        // The anchor tracks route samples, not workouts (see `importNewWorkouts`). Versions that anchored on
+        // workouts used another file; starting a fresh anchor re-reads the history once and picks up the
+        // routes that were skipped then.
+        self.anchorURL = anchorURL ?? support.appendingPathComponent("healthkit-route-anchor")
+        self.legacyAnchorURL = support.appendingPathComponent("healthkit-workout-anchor")
     }
 
     public func requestAuthorization() async throws {
@@ -29,24 +35,33 @@ public final class HealthKitRouteImporter: @unchecked Sendable {
     /// progress, many enough that saving and syncing the fog doesn't happen per route.
     public var batchSize = 50
 
-    /// Imports all workouts added since the last call (the first call imports the whole history).
+    /// Imports every workout route added since the last call (the first call imports the whole history),
+    /// whatever the activity: runs, walks, hikes, rides, ...
     /// `handler` is called with batches of routes (each a list of points); return value is the number of routes.
+    ///
+    /// The anchor is on route samples rather than workouts on purpose: a route is saved as its own sample,
+    /// often after its workout (always for workouts synced from the Watch, and later still for long hikes
+    /// and walks). Anchoring on workouts skipped those for good, because the workout was already past the
+    /// anchor by the time its route arrived.
     @discardableResult
     public func importNewWorkouts(_ handler: @escaping @Sendable ([[GeoPoint]]) async -> Void) async throws -> Int {
-        let descriptor = HKAnchoredObjectQueryDescriptor(predicates: [.workout()], anchor: loadAnchor())
+        // Observer wake-ups and manual imports can overlap; run them one after another so the anchor stays consistent.
+        try await gate.run { try await self.importNewRoutes(handler) }
+    }
+
+    private func importNewRoutes(_ handler: @escaping @Sendable ([[GeoPoint]]) async -> Void) async throws -> Int {
+        let descriptor = HKAnchoredObjectQueryDescriptor(predicates: [.workoutRoute()], anchor: loadAnchor())
         let result = try await descriptor.result(for: store)
         var imported = 0
         var batch: [[GeoPoint]] = []
-        for workout in result.addedSamples {
-            for route in try await routes(of: workout) {
-                let points = try await locations(of: route)
-                guard !points.isEmpty else { continue }
-                batch.append(points)
-                imported += 1
-                if batch.count >= batchSize {
-                    await handler(batch)
-                    batch.removeAll()
-                }
+        for route in result.addedSamples {
+            let points = try await locations(of: route)
+            guard !points.isEmpty else { continue }
+            batch.append(points)
+            imported += 1
+            if batch.count >= batchSize {
+                await handler(batch)
+                batch.removeAll()
             }
         }
         if !batch.isEmpty { await handler(batch) }
@@ -56,18 +71,22 @@ public final class HealthKitRouteImporter: @unchecked Sendable {
 
     /// Wakes the app when HealthKit gets a new workout (also in the background on iOS),
     /// then imports it. Requires the HealthKit background-delivery entitlement.
+    /// Watches both workouts and routes: the route of a workout can arrive after the workout itself.
     public func startObserving(_ handler: @escaping @Sendable ([[GeoPoint]]) async -> Void) {
-        guard observer == nil else { return }
-        let query = HKObserverQuery(sampleType: HKObjectType.workoutType(), predicate: nil) { [weak self] _, completion, error in
-            guard let self, error == nil else { completion(); return }
-            Task {
-                _ = try? await self.importNewWorkouts(handler)
-                completion()
+        guard observers.isEmpty else { return }
+        let types: [HKSampleType] = [HKObjectType.workoutType(), HKSeriesType.workoutRoute()]
+        for type in types {
+            let query = HKObserverQuery(sampleType: type, predicate: nil) { [weak self] _, completion, error in
+                guard let self, error == nil else { completion(); return }
+                Task {
+                    _ = try? await self.importNewWorkouts(handler)
+                    completion()
+                }
             }
+            observers.append(query)
+            store.execute(query)
+            store.enableBackgroundDelivery(for: type, frequency: .immediate) { _, _ in }
         }
-        observer = query
-        store.execute(query)
-        store.enableBackgroundDelivery(for: HKObjectType.workoutType(), frequency: .immediate) { _, _ in }
     }
 
     /// True once a full import has finished, which also means Health access was requested before.
@@ -77,12 +96,7 @@ public final class HealthKitRouteImporter: @unchecked Sendable {
 
     public func resetAnchor() {
         try? FileManager.default.removeItem(at: anchorURL)
-    }
-
-    private func routes(of workout: HKWorkout) async throws -> [HKWorkoutRoute] {
-        let d = HKSampleQueryDescriptor(predicates: [.workoutRoute(HKQuery.predicateForObjects(from: workout))],
-                                        sortDescriptors: [])
-        return try await d.result(for: store)
+        try? FileManager.default.removeItem(at: legacyAnchorURL)
     }
 
     private func locations(of route: HKWorkoutRoute) async throws -> [GeoPoint] {
@@ -103,6 +117,23 @@ public final class HealthKitRouteImporter: @unchecked Sendable {
         guard let data = try? NSKeyedArchiver.archivedData(withRootObject: anchor, requiringSecureCoding: true) else { return }
         try? FileManager.default.createDirectory(at: anchorURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: anchorURL, options: .atomic)
+        // The workout-based anchor of older versions is no longer used.
+        try? FileManager.default.removeItem(at: legacyAnchorURL)
+    }
+}
+
+/// Runs async operations strictly one after another.
+private actor ImportGate {
+    private var last: Task<Int, Error>?
+
+    func run(_ operation: @escaping @Sendable () async throws -> Int) async throws -> Int {
+        let previous = last
+        let task = Task<Int, Error> {
+            _ = try? await previous?.value
+            return try await operation()
+        }
+        last = task
+        return try await task.value
     }
 }
 #endif

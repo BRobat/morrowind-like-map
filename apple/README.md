@@ -63,6 +63,8 @@ The app never starts GPS. Fog is lifted only by:
 - **HealthKit workout routes** that something already recorded (Apple Watch Workout app, Strava,
   Nike Run Club, ...). The first launch imports your whole history. Later, an `HKObserverQuery` with
   background delivery wakes the app after each new workout. Both apps import, and the results merge.
+  Imports are anchored on route samples, not workouts, because a route is often saved after its
+  workout (Watch sync, long hikes); every route is picked up whenever it lands, for any activity type.
 - **GPX files** imported on the iPhone.
 - **Sync**: whenever either device reveals new cells it sends its grid file to the other over
   WatchConnectivity, and the receiver merges it.
