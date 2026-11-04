@@ -16,7 +16,8 @@ public final class MapTileCache {
     /// Cropped ancestor images for overzoomed tiles, with the source they were cut from.
     @ObservationIgnored private var crops: [TileID: (source: CGImage, image: CGImage)] = [:]
 
-    @ObservationIgnored private let provider: TileProvider
+    /// Shared with `WaypointCache`, so both read the same downloaded vector tiles.
+    @ObservationIgnored public let provider: TileProvider
     @ObservationIgnored private var bases: [TileID: RGBAImage] = [:]
     /// Least recently requested first.
     @ObservationIgnored private var lru: [TileID] = []

@@ -17,7 +17,7 @@ public enum FogDirty: Sendable, Equatable {
     }
 }
 
-/// App-wide owner of the fog grid: persistence, settings and change tracking.
+/// App-wide owner of the fog grid: persistence, settings (fog and places) and change tracking.
 @MainActor
 @Observable
 public final class FogStore {
@@ -33,6 +33,11 @@ public final class FogStore {
         didSet { UserDefaults.standard.set(style.rawValue, forKey: Keys.style) }
     }
 
+    /// Which towns, villages and points of interest the map shows.
+    public var placesVisibility: WaypointVisibility {
+        didSet { UserDefaults.standard.set(placesVisibility.rawValue, forKey: Keys.places) }
+    }
+
     /// Called after local imports add new cells (used to push changes to the paired device).
     @ObservationIgnored public var onLocalChange: ((FogGrid) -> Void)?
 
@@ -46,6 +51,7 @@ public final class FogStore {
     private enum Keys {
         static let radius = "fog.revealRadiusMeters"
         static let style = "fog.style"
+        static let places = "map.placesVisibility"
     }
 
     public init(fileURL: URL? = nil) {
@@ -56,6 +62,8 @@ public final class FogStore {
         let r = UserDefaults.standard.double(forKey: Keys.radius)
         self.revealRadiusMeters = r > 0 ? r : FogGrid.defaultRevealRadiusMeters
         self.style = UserDefaults.standard.string(forKey: Keys.style).flatMap(FogStyle.init(rawValue:)) ?? .hidden
+        self.placesVisibility = UserDefaults.standard.string(forKey: Keys.places)
+            .flatMap(WaypointVisibility.init(rawValue:)) ?? .discovered
     }
 
     /// Reveals along a recorded track. Returns the number of newly explored cells.

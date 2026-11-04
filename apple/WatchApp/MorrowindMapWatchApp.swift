@@ -25,7 +25,8 @@ struct MorrowindMapWatchApp: App {
 @Observable
 final class WatchModel {
     let fog = FogStore()
-    let tiles = MapTileCache()
+    let tiles: MapTileCache
+    let waypoints: WaypointCache
     var camera: MapCamera
     var player: GeoPoint?
 
@@ -34,6 +35,9 @@ final class WatchModel {
     @ObservationIgnored private var sync: FogSync?
 
     init() {
+        let tiles = MapTileCache()
+        self.tiles = tiles
+        waypoints = WaypointCache(provider: tiles.provider)
         camera = MapCamera(center: GeoPoint(latitude: 50.06, longitude: 19.94), zoom: 13)
         if let start = location.point ?? fog.grid.anyExploredPoint {
             camera = MapCamera(center: start, zoom: 14)
@@ -79,7 +83,8 @@ struct WatchContentView: View {
 
     var body: some View {
         NavigationStack {
-            MorrowindMapView(camera: $model.camera, fog: model.fog, tiles: model.tiles, player: model.player)
+            MorrowindMapView(camera: $model.camera, fog: model.fog, tiles: model.tiles,
+                             waypoints: model.waypoints, player: model.player)
                 .ignoresSafeArea()
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {

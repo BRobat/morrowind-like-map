@@ -6,17 +6,20 @@ apple/
 ├── Sources/MorrowindMapCore/     platform-independent logic (also testable with `swift test` on macOS)
 │   ├── TileMath.swift            Web Mercator, tile IDs, overzoom ancestors
 │   ├── ElevationGrid.swift       Terrarium decoding + bilinear resampling
-│   ├── VectorTile.swift          minimal MVT/protobuf decoder (water, waterway layers)
+│   ├── VectorTile.swift          minimal MVT/protobuf decoder (water, waterway, place, poi layers)
 │   ├── Rasterizer.swift          scanline polygon fill + line stroking
 │   ├── TileRenderer.swift        Morrowind look: palette, hillshade, water, shoreline, grain
 │   ├── FogOfWar.swift            FogGrid (explored z18 cells), coverage masks, compositing, file format
-│   ├── FogStore.swift            persisted, observable fog + settings (radius, style)
+│   ├── Waypoint.swift            towns / villages / POIs: kinds, extraction, discovery, label layout
+│   ├── FogStore.swift            persisted, observable fog + settings (radius, style, places)
 │   ├── TileProvider.swift        downloads with a permanent disk cache, renders tiles
 │   ├── HealthKitRouteImporter.swift  reads routes from recorded workouts (no GPS use)
 │   ├── GPXParser.swift           GPX import (Garmin Connect / Strava exports)
 │   ├── FogSync.swift             iPhone <-> Watch sync over WatchConnectivity
 │   └── LastKnownLocation.swift   cached position only, never starts GPS
 ├── Sources/MorrowindMapUI/       SwiftUI map view shared by both apps
+│   ├── WaypointCache.swift       loads waypoints per vector tile, memoises discovery
+│   └── WaypointOverlay.swift     ink icons + haloed serif labels
 ├── Tests/MorrowindMapCoreTests/
 ├── iOSApp/                       iPhone app
 ├── WatchApp/                     Apple Watch app (standalone-capable, companion of the iOS app)
@@ -73,3 +76,6 @@ The player marker uses `CLLocationManager.location`, the position the system alr
   Needs a reset tombstone in the sync protocol.
 - A large first import (years of workouts) runs in the foreground with no progress UI.
 - No map rotation, compass or scale bar yet.
+- Waypoints can't be tapped yet (no callout with the place's name/type), and there are no
+  user-placed markers.
+- Place names are the local `name`; a language preference (`name_en`, ...) would be easy to add.
