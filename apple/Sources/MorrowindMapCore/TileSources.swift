@@ -9,10 +9,10 @@ public enum MapSources {
     /// OpenFreeMap planet vector tiles (OpenMapTiles schema, data © OpenStreetMap contributors).
     /// The TileJSON names the current versioned tile URL, so we resolve it at runtime.
     public static let waterTileJSON = URL(string: "https://tiles.openfreemap.org/planet")!
-    /// Max zoom of the vector tiles. The same tiles hold water, places and POIs.
+    /// Max zoom of the vector tiles. The same tiles hold water, roads, places and POIs.
     public static let vectorMaxZoom = 14
 
-    public static let attribution = "Elevation: AWS Terrain Tiles (Mapzen, SRTM, GMTED, ETOPO1 and others) · Water & places: © OpenStreetMap contributors, OpenMapTiles, OpenFreeMap"
+    public static let attribution = "Elevation: AWS Terrain Tiles (Mapzen, SRTM, GMTED, ETOPO1 and others) · Water, roads & places: © OpenStreetMap contributors, OpenMapTiles, OpenFreeMap"
 
     public static func url(template: String, tile: TileID) -> URL? {
         URL(string: template

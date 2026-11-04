@@ -294,8 +294,11 @@ public enum FogStyle: String, Codable, CaseIterable, Sendable {
 }
 
 public enum FogCompositor {
+    /// - Parameter roads: road ink coverage (0…255) per pixel. Roads are drawn only where the map is
+    ///   explored and fade out with the fog edge; the fog itself is computed from the terrain without roads,
+    ///   so they never show through `hidden` or `grayed` fog.
     public static func apply(to base: RGBAImage, coverage: [Float], style: FogStyle, palette: Palette = .standard,
-                             tile: TileID) -> RGBAImage {
+                             tile: TileID, roads: [UInt8]? = nil) -> RGBAImage {
         let p = ResolvedPalette(palette)
         var out = base
         let size = base.width
@@ -303,9 +306,19 @@ public enum FogCompositor {
         let originY = UInt32(truncatingIfNeeded: tile.y &* size)
         for y in 0..<base.height {
             for x in 0..<base.width {
-                let a = Double(coverage[y * size + x])
-                if a >= 1 { continue }
+                let i = y * size + x
+                let a = Double(coverage[i])
+                // Fully explored and no road here: the base pixel is already right.
+                if a >= 1, (roads?[i] ?? 0) == 0 { continue }
                 let c = base[x, y]
+                var explored = c
+                if let roads, a > 0, roads[i] > 0 {
+                    explored = RGB.lerp(c, p.roadColor, Double(roads[i]) / 255)
+                }
+                if a >= 1 {
+                    out[x, y] = explored
+                    continue
+                }
                 let fog: RGB
                 switch style {
                 case .hidden:
@@ -318,7 +331,7 @@ public enum FogCompositor {
                     let d = p.fog.grayedDesaturation, k = 1 - p.fog.grayedDarken
                     fog = RGB(r: (r * (1 - d) + gray * d) * k, g: (g * (1 - d) + gray * d) * k, b: (b * (1 - d) + gray * d) * k)
                 }
-                out[x, y] = RGB.lerp(fog, c, a)
+                out[x, y] = RGB.lerp(fog, explored, a)
             }
         }
         return out

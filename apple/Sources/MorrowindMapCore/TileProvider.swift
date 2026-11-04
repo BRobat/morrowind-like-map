@@ -69,37 +69,70 @@ public final class TileProvider: @unchecked Sendable {
                 .appendingPathComponent("tiles/rendered/\(renderer.cacheKey)")
     }
 
-    /// The base map for a tile without fog.
-    public func baseTile(_ tile: TileID) async throws -> RGBAImage {
-        let file = renderedDirectory.appendingPathComponent("\(tile.z)/\(tile.x)/\(tile.y).png")
+    /// The base map for a tile without fog, plus its road layer.
+    public func baseTile(_ tile: TileID) async throws -> BaseTile {
+        let dir = renderedDirectory.appendingPathComponent("\(tile.z)/\(tile.x)")
+        let file = dir.appendingPathComponent("\(tile.y).png")
+        let roadsFile = dir.appendingPathComponent("\(tile.y).roads.png")
+        let size = renderer.size
         if let data = try? Data(contentsOf: file), let img = ImageCodec.decode(data),
-           img.width == renderer.size, img.height == renderer.size {
-            return img
+           img.width == size, img.height == size {
+            // The road file is written before the tile, so a tile without one has no roads.
+            let roads = (try? Data(contentsOf: roadsFile)).flatMap(ImageCodec.decode)
+                .flatMap { $0.width == size && $0.height == size ? Self.roadCoverage(fromGray: $0) : nil }
+            return BaseTile(image: img, roads: roads)
         }
         async let demTask = elevation(for: tile)
         async let waterTask = water(for: tile)
         let (dem, w) = try await (demTask, waterTask)
         let img = renderer.render(tile: tile, elevation: dem, water: w)
-        // Without water vectors (offline) the renderer guesses water from elevation; don't keep that guess.
+        let roads = w.flatMap { renderer.roadMask(tile: tile, source: $0) }
+        // Without vectors (offline) the renderer guesses water from elevation and has no roads; don't keep that.
         if w != nil {
             Task.detached(priority: .utility) {
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                if let roads, let png = ImageCodec.png(from: TileProvider.grayImage(fromRoadCoverage: roads, size: size)) {
+                    try? png.write(to: roadsFile, options: .atomic)
+                } else {
+                    try? FileManager.default.removeItem(at: roadsFile)
+                }
                 guard let png = ImageCodec.png(from: img) else { return }
-                try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try? png.write(to: file, options: .atomic)
             }
         }
-        return img
+        return BaseTile(image: img, roads: roads)
     }
 
-    /// The base map with fog of war composited on top.
+    /// Road coverage is stored as a grayscale PNG (it compresses to almost nothing where there are no roads).
+    static func grayImage(fromRoadCoverage roads: [UInt8], size: Int) -> RGBAImage {
+        var px = [UInt8](repeating: 255, count: size * size * 4)
+        for i in 0..<roads.count {
+            px[i * 4] = roads[i]
+            px[i * 4 + 1] = roads[i]
+            px[i * 4 + 2] = roads[i]
+        }
+        return RGBAImage(width: size, height: size, pixels: px)
+    }
+
+    static func roadCoverage(fromGray img: RGBAImage) -> [UInt8]? {
+        var out = [UInt8](repeating: 0, count: img.width * img.height)
+        var any = false
+        for i in 0..<out.count {
+            out[i] = img.pixels[i * 4]
+            if out[i] != 0 { any = true }
+        }
+        return any ? out : nil
+    }
+
+    /// The base map with fog of war composited on top (roads only where explored).
     public func tile(_ tile: TileID, fog: FogGrid, style: FogStyle) async throws -> RGBAImage {
         let base = try await baseTile(tile)
         return Self.applyFog(base, tile: tile, fog: fog, style: style, palette: renderer.palette)
     }
 
-    public static func applyFog(_ base: RGBAImage, tile: TileID, fog: FogGrid, style: FogStyle, palette: Palette) -> RGBAImage {
-        let coverage = fog.coverage(for: tile, size: base.width, edgeSoftness: palette.fog.edgeSoftnessPx)
-        return FogCompositor.apply(to: base, coverage: coverage, style: style, palette: palette, tile: tile)
+    public static func applyFog(_ base: BaseTile, tile: TileID, fog: FogGrid, style: FogStyle, palette: Palette) -> RGBAImage {
+        let coverage = fog.coverage(for: tile, size: base.image.width, edgeSoftness: palette.fog.edgeSoftnessPx)
+        return FogCompositor.apply(to: base.image, coverage: coverage, style: style, palette: palette, tile: tile, roads: base.roads)
     }
 
     // MARK: - Inputs

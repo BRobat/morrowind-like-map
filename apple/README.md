@@ -6,9 +6,10 @@ apple/
 ├── Sources/MorrowindMapCore/     platform-independent logic (also testable with `swift test` on macOS)
 │   ├── TileMath.swift            Web Mercator, tile IDs, overzoom ancestors
 │   ├── ElevationGrid.swift       Terrarium decoding + bilinear resampling
-│   ├── VectorTile.swift          minimal MVT/protobuf decoder (water, waterway, place, poi layers)
+│   ├── VectorTile.swift          minimal MVT/protobuf decoder (water, waterway, transportation, place, poi)
 │   ├── Rasterizer.swift          scanline polygon fill + line stroking
 │   ├── TileRenderer.swift        Morrowind look: palette, hillshade, water, shoreline, grain
+│   ├── Roads.swift               road classes/widths, antialiased road layer, BaseTile
 │   ├── FogOfWar.swift            FogGrid (explored z18 cells), coverage masks, compositing, file format
 │   ├── Waypoint.swift            towns / villages / POIs: kinds, extraction, discovery, label layout
 │   ├── FogStore.swift            persisted, observable fog + settings (radius, style, places)

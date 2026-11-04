@@ -18,7 +18,7 @@ public final class MapTileCache {
 
     /// Shared with `WaypointCache`, so both read the same downloaded vector tiles.
     @ObservationIgnored public let provider: TileProvider
-    @ObservationIgnored private var bases: [TileID: RGBAImage] = [:]
+    @ObservationIgnored private var bases: [TileID: BaseTile] = [:]
     /// Least recently requested first.
     @ObservationIgnored private var lru: [TileID] = []
     /// Tiles the view currently shows, centre first. Only these get rendered.
@@ -126,7 +126,7 @@ public final class MapTileCache {
         let grid = fog.grid, style = fog.style, revision = fog.revision
         Task.detached(priority: .userInitiated) {
             do {
-                let b: RGBAImage
+                let b: BaseTile
                 if let base { b = base } else { b = try await provider.baseTile(tile) }
                 let composed = TileProvider.applyFog(b, tile: tile, fog: grid, style: style, palette: palette)
                 let cg = ImageCodec.cgImage(from: composed)
@@ -137,7 +137,7 @@ public final class MapTileCache {
         }
     }
 
-    private func finish(_ tile: TileID, base: RGBAImage, image: CGImage?, revision: Int, style: FogStyle) {
+    private func finish(_ tile: TileID, base: BaseTile, image: CGImage?, revision: Int, style: FogStyle) {
         pending.remove(tile)
         failed[tile] = image == nil ? Date() : nil
         if bases[tile] == nil {

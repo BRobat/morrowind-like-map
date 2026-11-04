@@ -1,8 +1,8 @@
 # Morrowind-like map
 
 A real-world map drawn like the in-game map from *The Elder Scrolls III: Morrowind*: parchment-brown
-relief from a heightmap and muted blue water, with no roads. Towns and villages are inked on in the
-style of the game maps, and zooming in reveals waypoints such as peaks, castles, huts and caves. On top
+relief from a heightmap and muted blue water. Roads and paths are inked in only where you have been,
+so the map fills in as you explore. Towns and villages are inked on in the style of the game maps, and zooming in reveals waypoints such as peaks, castles, huts and caves. On top
 sits a **fog of war**:
 the map stays hidden until you have been there. Places are revealed from GPS routes your watch
 **already records** during runs, hikes and rides. The app never turns on GPS itself.
@@ -17,6 +17,16 @@ the map stays hidden until you have been there. Places are revealed from GPS rou
 
 *(Previews from `tools/preview.py`, with water from elevation only, a synthetic route and hand-picked
 demo places from `tools/demo-places.json`. The apps read real places from OpenStreetMap.)*
+
+## Roads
+
+Roads, tracks and footpaths from OpenStreetMap are drawn as ink lines, but **only in the explored
+area**. They stay hidden under the fog even where the fog lets the terrain show through, and fade out
+with its soft edge. Major roads show from z6–9, minor roads and tracks from z12, paths from z13.
+
+| Road layer (synthetic demo network, z13) | The same, only where explored |
+|---|---|
+| ![](docs/images/roads-z13.jpg) | ![](docs/images/roads-explored-z13.jpg) |
 
 ## Places and waypoints
 
@@ -43,7 +53,7 @@ Spec: [shared/waypoints-spec.md](shared/waypoints-spec.md).
 ## Map data (free, no API keys)
 
 - **Elevation**: AWS Terrain Tiles (Terrarium PNG, z0–15)
-- **Water, places and POIs**: OpenFreeMap vector tiles (OpenStreetMap data, OpenMapTiles schema, z0–14)
+- **Water, roads, places and POIs**: OpenFreeMap vector tiles (OpenStreetMap data, OpenMapTiles schema, z0–14)
 
 Tiles are rendered on the device into the Morrowind style and cached permanently. Details and
 attribution are in [shared/data-sources.md](shared/data-sources.md).

@@ -11,21 +11,21 @@ each area is downloaded once and then works offline.
 - Attribution: *Mapzen Terrain Tiles; data from SRTM, GMTED2010, ETOPO1, NED, and other sources*
   (full list: https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
 
-## Water, places and POIs: OpenFreeMap vector tiles
+## Water, roads, places and POIs: OpenFreeMap vector tiles
 
 - TileJSON: `https://tiles.openfreemap.org/planet`. Read `tiles[0]` for the current versioned URL
   template (`…/planet/<version>/{z}/{x}/{y}.pbf`).
 - Zoom 0–14, Mapbox Vector Tile (MVT) format, [OpenMapTiles schema](https://openmaptiles.org/schema/).
   We use the `water` (polygons) and `waterway` (lines) layers for the water mask, and the `place`,
-  `mountain_peak` and `poi` layers for waypoints ([waypoints-spec.md](waypoints-spec.md)). Both read the
-  same downloaded tile.
+  `mountain_peak` and `poi` layers for waypoints ([waypoints-spec.md](waypoints-spec.md)), and the
+  `transportation` layer for roads. All of them read the same downloaded tile.
 - No usage limits or registration ([openfreemap.org](https://openfreemap.org)). Send a descriptive
   `User-Agent`.
 - Attribution: *© OpenStreetMap contributors, OpenMapTiles, OpenFreeMap*.
 
 ## Required on-screen attribution
 
-> Elevation: AWS Terrain Tiles (Mapzen, SRTM, GMTED, ETOPO1 and others) · Water & places: © OpenStreetMap
+> Elevation: AWS Terrain Tiles (Mapzen, SRTM, GMTED, ETOPO1 and others) · Water, roads & places: © OpenStreetMap
 > contributors, OpenMapTiles, OpenFreeMap
 
 ## Alternatives if a source goes away

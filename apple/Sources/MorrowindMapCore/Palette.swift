@@ -31,6 +31,13 @@ public struct Palette: Codable, Sendable {
         public var noiseAmplitude: Double
     }
 
+    /// Roads are an ink layer that only shows in explored areas (see render-spec.md, step 7).
+    public struct Roads: Codable, Sendable {
+        public var color: String
+        /// Multiplies every road class's own opacity.
+        public var opacity: Double
+    }
+
     public struct Fog: Codable, Sendable {
         public var hiddenColor: String
         /// How much of the terrain the `hidden` fog covers: 1 = solid parchment, lower lets the map show through.
@@ -45,6 +52,7 @@ public struct Palette: Codable, Sendable {
     public var water: Water
     public var hillshade: Hillshade
     public var parchment: Parchment
+    public var roads: Roads
     public var fog: Fog
 
     public static let standard: Palette = {
@@ -72,6 +80,8 @@ struct ResolvedPalette {
     let hillshade: Palette.Hillshade
     let noiseAmplitude: Double
     let fogHidden: RGB
+    let roadColor: RGB
+    let roadOpacity: Double
     let fog: Palette.Fog
 
     init(_ p: Palette) {
@@ -85,6 +95,8 @@ struct ResolvedPalette {
         hillshade = p.hillshade
         noiseAmplitude = p.parchment.noiseAmplitude
         fogHidden = RGB(hex: p.fog.hiddenColor) ?? RGB(216, 200, 162)
+        roadColor = RGB(hex: p.roads.color) ?? RGB(92, 68, 48)
+        roadOpacity = p.roads.opacity
         fog = p.fog
     }
 

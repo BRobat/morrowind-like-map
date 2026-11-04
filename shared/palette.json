@@ -30,6 +30,10 @@
   "parchment": {
     "noiseAmplitude": 0.05
   },
+  "roads": {
+    "color": "#5C4430",
+    "opacity": 1.0
+  },
   "fog": {
     "hiddenColor": "#D8C8A2",
     "hiddenOpacity": 0.75,

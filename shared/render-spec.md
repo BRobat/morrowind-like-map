@@ -1,8 +1,8 @@
 # Morrowind-style tile rendering
 
 The look is a hand-drawn parchment map. Land is shades of brown that get darker with elevation and is
-lit by hillshade. Water is a muted blue with a dark ink shoreline. There are no roads or buildings;
-named places are an ink overlay on top (step 8). Every platform renders tiles on the device from raw data, following the steps below with the
+lit by hillshade. Water is a muted blue with a dark ink shoreline. There are no buildings. Roads are
+inked in, but only where you have explored (step 7), and named places are an overlay on top (step 9). Every platform renders tiles on the device from raw data, following the steps below with the
 values in [`palette.json`](palette.json). [`tools/preview.py`](../tools/preview.py) is the executable
 reference.
 
@@ -12,7 +12,7 @@ Tiles are 256 px Web Mercator XYZ tiles.
 
 1. **Elevation**: a Terrarium PNG for the tile, where `meters = R·256 + G + B/256 − 32768`. Above the
    source's max zoom (15), take the z15 ancestor and resample its sub-square bilinearly.
-2. **Water**: an OpenMapTiles vector tile (layers `water` and `waterway`). Above z14, use the z14
+2. **Water and roads**: an OpenMapTiles vector tile (layers `water`, `waterway` and `transportation`). Above z14, use the z14
    ancestor and scale its geometry. If the vector tile can't be loaded (offline, never cached), treat
    pixels with `elevation ≤ 0` as water. A vector tile that returns 404 means "no water here".
 
@@ -46,9 +46,31 @@ Tiles are 256 px Web Mercator XYZ tiles.
    h = h ^ (h >> 16)
    n = (h & 0xFFFF) / 65535
    ```
-7. **Fog of war** is composited on top. See [`fog-format.md`](fog-format.md).
-8. **Waypoints** (towns, villages, POIs) are drawn as a vector overlay above the tiles, not baked into
+7. **Road layer**, kept separate from the base colour (it must not show through fog). From the
+   `transportation` layer, skipping `brunnel=tunnel`, stroke lines with round joins into one coverage
+   mask per group, at 2× supersampling. Widths are in 256-px pixels:
+
+   | Class | From zoom | Width | Group (opacity) |
+   |---|---|---|---|
+   | `motorway`, `trunk` | 6 | `min(0.9 + 0.3·(z−6), 4)` | major (0.95) |
+   | `primary` | 8 | `min(0.8 + 0.3·(z−8), 3.5)` | major (0.95) |
+   | `secondary` | 9 | `min(0.7 + 0.25·(z−9), 3)` | medium (0.85) |
+   | `tertiary` | 10 | `min(0.6 + 0.25·(z−10), 2.5)` | medium (0.85) |
+   | `minor` | 12 | `min(0.6 + 0.2·(z−12), 2)` | minor (0.7) |
+   | `service` | 14 | `min(0.5 + 0.2·(z−14), 1.5)` | minor (0.7) |
+   | `track` | 12 | `min(0.5 + 0.15·(z−12), 1.2)` | track (0.6) |
+   | `path` (footways, cycleways, trails) | 13 | `min(0.5 + 0.15·(z−13), 1.2)` | path (0.5) |
+
+   Downsample each group mask to coverage `n/4` (samples hit in the 2×2 block), multiply by the group
+   opacity and `roads.opacity`, and keep the maximum over groups: `road ∈ [0, 1]` per pixel.
+   With no vector tile (offline), there are no roads.
+8. **Fog of war** is composited on top. See [`fog-format.md`](fog-format.md). With fog coverage `a`
+   (1 = explored):
+   - `explored = lerp(base, roads.color, road)`
+   - `fog` is computed from `base`, **not** `explored`, so roads never show through the fog.
+   - `out = lerp(fog, explored, a)`: roads appear only in explored areas and fade out with the fog edge.
+9. **Waypoints** (towns, villages, POIs) are drawn as a vector overlay above the tiles, not baked into
    them, so labels stay sharp and can cross tile edges. See [`waypoints-spec.md`](waypoints-spec.md).
 
-Cache the base tile (steps 1–6) separately from the fog composite. The base never changes; the fog
+Cache the base tile (steps 1–6) and the road layer (step 7) separately from the fog composite. The base never changes; the fog
 changes after every run.

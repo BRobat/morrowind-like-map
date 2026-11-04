@@ -479,3 +479,88 @@ final class WaypointTests: XCTestCase {
         XCTAssertEqual(moved[1].anchor, .right)
     }
 }
+
+final class RoadTests: XCTestCase {
+    /// Hand-encodes a `transportation` layer of straight lines. Each: (class, brunnel, points) in a 4096 extent.
+    static func roadTile(_ lines: [(cls: String, brunnel: String?, points: [(Int64, Int64)])]) -> Data {
+        func varint(_ v: UInt64) -> [UInt8] {
+            var v = v, out: [UInt8] = []
+            repeat {
+                var b = UInt8(v & 0x7F); v >>= 7
+                if v != 0 { b |= 0x80 }
+                out.append(b)
+            } while v != 0
+            return out
+        }
+        func zz(_ v: Int64) -> UInt64 { UInt64(bitPattern: (v << 1) ^ (v >> 63)) }
+        func field(_ n: Int, _ wire: Int) -> [UInt8] { varint(UInt64(n << 3 | wire)) }
+        func bytes(_ n: Int, _ b: [UInt8]) -> [UInt8] { field(n, 2) + varint(UInt64(b.count)) + b }
+        func packed(_ n: Int, _ vals: [UInt64]) -> [UInt8] { bytes(n, vals.flatMap(varint)) }
+
+        let keys = ["class", "brunnel"]
+        var values: [String] = []
+        func valueIndex(_ s: String) -> UInt64 {
+            if let i = values.firstIndex(of: s) { return UInt64(i) }
+            values.append(s)
+            return UInt64(values.count - 1)
+        }
+        var body = field(15, 0) + varint(2) + bytes(1, Array("transportation".utf8))
+        for line in lines {
+            var tags: [UInt64] = [0, valueIndex(line.cls)]
+            if let b = line.brunnel { tags += [1, valueIndex(b)] }
+            var geom: [UInt64] = [9, zz(line.points[0].0), zz(line.points[0].1), UInt64(2 | ((line.points.count - 1) << 3))]
+            for i in 1..<line.points.count {
+                geom += [zz(line.points[i].0 - line.points[i - 1].0), zz(line.points[i].1 - line.points[i - 1].1)]
+            }
+            body += bytes(2, packed(2, tags) + field(3, 0) + varint(2) + packed(4, geom))
+        }
+        for k in keys { body += bytes(3, Array(k.utf8)) }
+        for v in values { body += bytes(4, bytes(1, Array(v.utf8))) }
+        body += field(5, 0) + varint(4096)
+        return Data(bytes(3, body))
+    }
+
+    func testRoadTiers() {
+        XCTAssertNil(RoadGroup.style(class: "primary", zoom: 7))
+        XCTAssertEqual(RoadGroup.style(class: "primary", zoom: 8)?.group, .major)
+        XCTAssertEqual(RoadGroup.style(class: "tertiary", zoom: 10)?.group, .medium)
+        XCTAssertNil(RoadGroup.style(class: "path", zoom: 12))
+        XCTAssertEqual(RoadGroup.style(class: "path", zoom: 13)?.group, .path)
+        XCTAssertNil(RoadGroup.style(class: "rail", zoom: 14))
+        XCTAssertEqual(RoadGroup.style(class: "motorway", zoom: 20)?.width, 4)
+    }
+
+    func testRoadMaskDrawsRoadsAndSkipsTunnels() throws {
+        let vt = try VectorTile(data: Self.roadTile([
+            (cls: "primary", brunnel: nil, points: [(-100, 2048), (4200, 2048)]),        // across the middle
+            (cls: "primary", brunnel: "tunnel", points: [(-100, 1024), (4200, 1024)]),   // hidden underground
+            (cls: "path", brunnel: nil, points: [(-100, 3072), (4200, 3072)]),           // too small for z12
+        ]))
+        let renderer = TileRenderer(size: 64)
+        let mask = try XCTUnwrap(renderer.roadMask(tile: TileID(z: 12, x: 0, y: 0), source: .init(tile: vt)))
+        XCTAssertEqual(mask.count, 64 * 64)
+        func rowMax(_ y: Int) -> UInt8 { (0..<64).map { mask[y * 64 + $0] }.max()! }
+        XCTAssertGreaterThan((30...33).map(rowMax).max()!, 0)
+        XCTAssertEqual(rowMax(16), 0)
+        XCTAssertEqual(rowMax(48), 0)
+        XCTAssertEqual(rowMax(2), 0)
+    }
+
+    func testNoRoadsGivesNil() throws {
+        let vt = try VectorTile(data: Self.roadTile([(cls: "path", brunnel: nil, points: [(0, 0), (4096, 4096)])]))
+        XCTAssertNil(TileRenderer(size: 32).roadMask(tile: TileID(z: 10, x: 0, y: 0), source: .init(tile: vt)))
+    }
+
+    func testRoadsShowOnlyWhereExplored() {
+        let base = RGBAImage(width: 2, height: 1, fill: RGB(180, 160, 120))
+        let tile = TileID(z: 1, x: 0, y: 0)
+        let palette = Palette.standard
+        let roadColor = RGB(hex: palette.roads.color)!
+        for style in FogStyle.allCases {
+            let withRoads = FogCompositor.apply(to: base, coverage: [1, 0], style: style, palette: palette, tile: tile, roads: [255, 255])
+            let without = FogCompositor.apply(to: base, coverage: [1, 0], style: style, palette: palette, tile: tile)
+            XCTAssertEqual(withRoads[0, 0], roadColor, "explored: full road ink")
+            XCTAssertEqual(withRoads[1, 0], without[1, 0], "fog: no trace of the road (\(style))")
+        }
+    }
+}

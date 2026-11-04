@@ -10,6 +10,7 @@ doesn't decode.
     python3 tools/preview.py --lat 46.0 --lon 7.75 --zoom 11 --size 3 -o preview.png
     python3 tools/preview.py ... --fog-demo        # adds a synthetic explored route
     python3 tools/preview.py ... --places-demo     # draws waypoints from tools/demo-places.json
+    python3 tools/preview.py ... --roads-demo      # synthetic roads, shown only where explored
 
 Waypoint drawing (icons, labels, collision layout, discovery) follows
 shared/waypoints-spec.md and mirrors apple/Sources/MorrowindMapUI/WaypointOverlay.swift.
@@ -143,6 +144,80 @@ def demo_cells(lat, lon, radius_m=100):
                 if (dx * cell_m) ** 2 + (dy * cell_m) ** 2 <= radius_m ** 2:
                     cells.add((int(fx) + dx, int(fy) + dy))
     return cells
+
+
+# --- Roads (shared/render-spec.md, steps 7-8) ---------------------------------------------------
+
+ROAD_CLASSES = {  # class: (minZoom, width(z), group opacity)
+    "motorway":  (6, lambda z: min(0.9 + 0.3 * (z - 6), 4), 0.95),
+    "trunk":     (6, lambda z: min(0.9 + 0.3 * (z - 6), 4), 0.95),
+    "primary":   (8, lambda z: min(0.8 + 0.3 * (z - 8), 3.5), 0.95),
+    "secondary": (9, lambda z: min(0.7 + 0.25 * (z - 9), 3), 0.85),
+    "tertiary":  (10, lambda z: min(0.6 + 0.25 * (z - 10), 2.5), 0.85),
+    "minor":     (12, lambda z: min(0.6 + 0.2 * (z - 12), 2), 0.7),
+    "service":   (14, lambda z: min(0.5 + 0.2 * (z - 14), 1.5), 0.7),
+    "track":     (12, lambda z: min(0.5 + 0.15 * (z - 12), 1.2), 0.6),
+    "path":      (13, lambda z: min(0.5 + 0.15 * (z - 13), 1.2), 0.5),
+}
+
+
+def demo_roads(lat, lon):
+    """A synthetic road network around the centre: [(class, [(lat, lon), ...])]. Not real data."""
+    rng = np.random.default_rng(7)
+    m_lat, m_lon = 1 / 111320, 1 / (111320 * math.cos(math.radians(lat)))
+
+    def wavy(x0, y0, x1, y1, amp, n=60):
+        pts = []
+        phase = rng.uniform(0, 6.28)
+        for i in range(n + 1):
+            t = i / n
+            x, y = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+            dx, dy = y1 - y0, -(x1 - x0)
+            norm = math.hypot(dx, dy) or 1
+            off = amp * math.sin(t * 9 + phase) + amp * 0.4 * math.sin(t * 23 + phase * 2)
+            pts.append((lat + (y + dy / norm * off) * m_lat, lon + (x + dx / norm * off) * m_lon))
+        return pts
+
+    roads = [("primary", wavy(-12000, -1500, 12000, 2500, 400)),
+             ("secondary", wavy(1500, -12000, -800, 12000, 500)),
+             ("tertiary", wavy(-9000, 8000, 9000, -6000, 350))]
+    for _ in range(14):
+        x, y = rng.uniform(-5000, 5000, 2)
+        a = rng.uniform(0, math.pi)
+        r = rng.uniform(1500, 4000)
+        roads.append(("minor", wavy(x - r * math.cos(a), y - r * math.sin(a), x + r * math.cos(a), y + r * math.sin(a), 120, 30)))
+    for _ in range(10):
+        x, y = rng.uniform(-5000, 5000, 2)
+        a = rng.uniform(0, math.pi)
+        r = rng.uniform(800, 2500)
+        cls = "track" if rng.uniform() < 0.5 else "path"
+        roads.append((cls, wavy(x - r * math.cos(a), y - r * math.sin(a), x + r * math.cos(a), y + r * math.sin(a), 200, 30)))
+    return roads
+
+
+def road_mask(roads, z, tx0, ty0, h, w, opacity=1.0, ss=2):
+    """Road coverage 0..1 per pixel, as in render-spec step 7 (per-group masks, 2x supersampling, max)."""
+    groups = {}
+    for cls, pts in roads:
+        min_z, width, alpha = ROAD_CLASSES[cls]
+        if z < min_z:
+            continue
+        img = groups.setdefault(alpha, Image.new("L", (w * ss, h * ss), 0))
+        d = ImageDraw.Draw(img)
+        xy = []
+        for plat, plon in pts:
+            fx, fy = lonlat_to_tile(plon, plat, z)
+            xy.append(((fx - tx0) * TILE * ss, (fy - ty0) * TILE * ss))
+        wpx = max(1, int(round(width(z) * ss)))
+        d.line(xy, fill=255, width=wpx, joint="curve")
+        r = wpx / 2
+        for x, y in (xy[0], xy[-1]):
+            d.ellipse([x - r, y - r, x + r, y + r], fill=255)
+    out = np.zeros((h, w))
+    for alpha, img in groups.items():
+        cov = np.asarray(img, dtype=np.float64).reshape(h, ss, w, ss).mean(axis=(1, 3)) / 255
+        out = np.maximum(out, cov * alpha * opacity)
+    return out
 
 
 # --- Waypoints (shared/waypoints-spec.md) -------------------------------------------------------
@@ -404,6 +479,7 @@ def main():
     ap.add_argument("--size", type=int, default=3, help="tiles per side")
     ap.add_argument("--fog-demo", action="store_true")
     ap.add_argument("--fog-style", choices=["hidden", "grayed"], default="hidden")
+    ap.add_argument("--roads-demo", action="store_true", help="draw a synthetic road network (only where explored)")
     ap.add_argument("--places-demo", action="store_true", help="draw waypoints from --places")
     ap.add_argument("--places", default=os.path.join(ROOT, "tools", "demo-places.json"))
     ap.add_argument("--all-places", action="store_true", help="also draw undiscovered places, faded")
@@ -425,6 +501,12 @@ def main():
     img = render(dem, z, ty0, pal)
 
     cells = demo_cells(args.lat, args.lon) if args.fog_demo else set()
+    # Step 7-8: roads go into `explored` only; the fog below is computed from the road-free base.
+    explored = img
+    if args.roads_demo:
+        road = road_mask(demo_roads(args.lat, args.lon), z, tx0, ty0, *dem.shape,
+                         pal["roads"]["opacity"])[..., None]
+        explored = img + (hex_rgb(pal["roads"]["color"]) - img) * road
     if args.fog_demo:
         fog = pal["fog"]
         mask = fog_mask(cells, z, tx0, ty0, *dem.shape,
@@ -436,7 +518,9 @@ def main():
         else:
             gray = img.mean(axis=-1, keepdims=True)
             hidden = (img * (1 - fog["grayedDesaturation"]) + gray * fog["grayedDesaturation"]) * (1 - fog["grayedDarken"])
-        img = img * mask + hidden * (1 - mask)
+        img = explored * mask + hidden * (1 - mask)
+    else:
+        img = explored
 
     if args.places_demo:
         with open(args.places) as f:
