@@ -2,13 +2,14 @@
   "comment": "Shared Morrowind-style palette. All platforms (apple, garmin, android, tools/preview.py) must read the same values. Colors are sRGB hex. Elevation in meters.",
   "version": 1,
   "land": [
-    { "elevation": 0,    "color": "#C9B48A" },
-    { "elevation": 200,  "color": "#BCA174" },
-    { "elevation": 600,  "color": "#A88A5E" },
-    { "elevation": 1200, "color": "#8E7049" },
-    { "elevation": 2000, "color": "#735838" },
-    { "elevation": 3000, "color": "#5E4630" },
-    { "elevation": 5000, "color": "#4A3726" }
+    { "elevation": 0,    "color": "#D4C096" },
+    { "elevation": 100,  "color": "#C6AC7C" },
+    { "elevation": 300,  "color": "#B39462" },
+    { "elevation": 700,  "color": "#9A7A50" },
+    { "elevation": 1300, "color": "#86684A" },
+    { "elevation": 2100, "color": "#6E5338" },
+    { "elevation": 3000, "color": "#5A432C" },
+    { "elevation": 5000, "color": "#463421" }
   ],
   "water": {
     "shallow": "#6F8E96",
@@ -20,10 +21,10 @@
   "hillshade": {
     "azimuthDegrees": 315,
     "altitudeDegrees": 45,
-    "exaggeration": 1.0,
-    "strength": 0.45,
-    "minFactor": 0.55,
-    "maxFactor": 1.25,
+    "exaggeration": 1.6,
+    "strength": 0.7,
+    "minFactor": 0.52,
+    "maxFactor": 1.35,
     "lowZoomBoostBelow": 12,
     "lowZoomBoostPerLevel": 0.35
   },
