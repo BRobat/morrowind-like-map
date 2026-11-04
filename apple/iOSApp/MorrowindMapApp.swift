@@ -28,7 +28,8 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            MorrowindMapView(camera: $model.camera, fog: model.fog, tiles: model.tiles, player: model.player)
+            MorrowindMapView(camera: $model.camera, fog: model.fog, tiles: model.tiles,
+                             waypoints: model.waypoints, player: model.player)
                 .ignoresSafeArea()
 
             VStack(spacing: 8) {
@@ -93,6 +94,15 @@ struct SettingsView: View {
                     Text("Applies to newly imported routes. Use “Re-import all workouts” to apply it to your history.")
                         .font(.footnote).foregroundStyle(.secondary)
                     LabeledContent("Explored cells", value: "\(fog.grid.count)")
+                }
+                Section("Places") {
+                    Picker("Towns and waypoints", selection: $fog.placesVisibility) {
+                        Text("Discovered").tag(WaypointVisibility.discovered)
+                        Text("All (undiscovered faded)").tag(WaypointVisibility.all)
+                        Text("Off").tag(WaypointVisibility.off)
+                    }
+                    Text("Cities and towns are always on the map. Villages, peaks, castles, huts and other waypoints appear once a route has passed near them. Smaller places show up as you zoom in.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section {
                     Button("Re-import all workouts") { Task { await model.reimportAll() } }

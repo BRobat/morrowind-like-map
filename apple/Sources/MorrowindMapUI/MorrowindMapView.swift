@@ -1,11 +1,14 @@
 import MorrowindMapCore
 import SwiftUI
 
-/// The Morrowind-style map with fog of war. Works on iOS (drag + pinch) and watchOS (drag + Digital Crown).
+/// The Morrowind-style map with fog of war and waypoints (towns, villages, points of interest).
+/// Works on iOS (drag + pinch) and watchOS (drag + Digital Crown).
 public struct MorrowindMapView: View {
     @Binding var camera: MapCamera
     let fog: FogStore
     let tiles: MapTileCache
+    /// Places to draw on top of the map; nil for none. Which ones show is `fog.placesVisibility`.
+    let waypoints: WaypointCache?
     /// Last known position, if any. Never requested by the map itself.
     let player: GeoPoint?
 
@@ -15,10 +18,12 @@ public struct MorrowindMapView: View {
     @State private var crownZoom: Double = 12
     #endif
 
-    public init(camera: Binding<MapCamera>, fog: FogStore, tiles: MapTileCache, player: GeoPoint? = nil) {
+    public init(camera: Binding<MapCamera>, fog: FogStore, tiles: MapTileCache, waypoints: WaypointCache? = nil,
+                player: GeoPoint? = nil) {
         self._camera = camera
         self.fog = fog
         self.tiles = tiles
+        self.waypoints = waypoints
         self.player = player
     }
 
@@ -28,9 +33,13 @@ public struct MorrowindMapView: View {
             let visible = camera.visibleTiles(viewSize: size)
             // Read here so loading tiles re-renders the view (the Canvas closure runs outside body).
             let _ = tiles.images.count
+            let dataTiles = WaypointCache.dataTiles(for: visible.compactMap { $0.tile.normalized })
+            let _ = waypoints?.revision
+            let placesVisibility = fog.placesVisibility
             ZStack {
                 Canvas { ctx, _ in
                     drawTiles(visible, in: &ctx)
+                    if placesVisibility != .off { drawWaypoints(dataTiles, visibility: placesVisibility, size: size, in: &ctx) }
                     if let player { drawPlayer(at: camera.screenPoint(for: player, viewSize: size), in: &ctx) }
                 }
                 vignette
@@ -48,6 +57,9 @@ public struct MorrowindMapView: View {
             #endif
             .task(id: RequestKey(tiles: visible.compactMap { $0.tile.normalized }, revision: fog.revision, style: fog.style)) {
                 tiles.request(visible.compactMap { $0.tile.normalized }, fog: fog.grid, revision: fog.revision, style: fog.style)
+            }
+            .task(id: placesVisibility == .off ? [] : dataTiles) {
+                if placesVisibility != .off { waypoints?.request(dataTiles) }
             }
         }
         #if os(watchOS)
@@ -73,6 +85,25 @@ public struct MorrowindMapView: View {
             let rect = CGRect(x: v.x, y: v.y, width: v.side, height: v.side).insetBy(dx: -0.25, dy: -0.25)
             ctx.draw(Image(decorative: img, scale: 1), in: rect)
         }
+    }
+
+    /// Places inside or just outside the view, filtered by zoom and discovery, then laid out without overlaps.
+    private func drawWaypoints(_ dataTiles: [TileID], visibility: WaypointVisibility, size: (w: Double, h: Double),
+                               in ctx: inout GraphicsContext) {
+        guard let waypoints else { return }
+        let zoom = camera.zoom
+        // A margin keeps labels from popping in right at the edge while panning.
+        let margin = 40.0
+        let grid = fog.grid, revision = fog.revision
+        var candidates: [WaypointLayout.Candidate] = []
+        for w in waypoints.waypoints(in: dataTiles) where w.isVisible(atZoom: zoom) {
+            let p = camera.screenPoint(for: w.location, viewSize: size)
+            guard p.x > -margin, p.y > -margin, p.x < size.w + margin, p.y < size.h + margin else { continue }
+            let discovered = waypoints.isDiscovered(w, fog: grid, revision: revision)
+            guard visibility.shows(w, discovered: discovered) else { continue }
+            candidates.append(WaypointLayout.Candidate(waypoint: w, x: p.x, y: p.y, discovered: discovered))
+        }
+        WaypointOverlay.draw(candidates, zoom: zoom, in: &ctx)
     }
 
     /// A small arrowhead in dark red ink, as used for the player on the in-game map.

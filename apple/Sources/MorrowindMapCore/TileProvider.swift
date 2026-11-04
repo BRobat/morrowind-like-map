@@ -100,22 +100,28 @@ public final class TileProvider: @unchecked Sendable {
 
     /// Water vectors, or nil if they can't be loaded (then the renderer falls back to sea level).
     private func water(for tile: TileID) async -> TileRenderer.WaterSource? {
-        let a = tile.ancestor(atZoom: min(tile.z, MapSources.waterMaxZoom))
-        if let cached = await decoded.vector(a.tile) {
-            return .init(tile: cached, offsetX: a.offsetX, offsetY: a.offsetY, scale: a.scale)
-        }
+        let a = tile.ancestor(atZoom: min(tile.z, MapSources.vectorMaxZoom))
+        guard let vt = await vectorTile(a.tile) else { return nil }
+        return .init(tile: vt, offsetX: a.offsetX, offsetY: a.offsetY, scale: a.scale)
+    }
+
+    /// The OpenMapTiles vector tile (water, places, POIs, ...) for `tile`, which must be at or below
+    /// `MapSources.vectorMaxZoom`. Returns nil if it can't be loaded right now (offline and not cached).
+    /// The same downloaded file serves both the water mask and the waypoints.
+    public func vectorTile(_ tile: TileID) async -> VectorTile? {
+        if let cached = await decoded.vector(tile) { return cached }
         do {
             let template = try await waterTemplate.resolve(using: fetcher)
-            guard let url = MapSources.url(template: template, tile: a.tile) else { return nil }
-            let data = try await fetcher.data(from: url, cacheKey: "water/\(a.tile.z)/\(a.tile.x)/\(a.tile.y).pbf")
+            guard let url = MapSources.url(template: template, tile: tile) else { return nil }
+            let data = try await fetcher.data(from: url, cacheKey: "water/\(tile.z)/\(tile.x)/\(tile.y).pbf")
             let vt = try VectorTile(data: data)
-            await decoded.store(vector: vt, for: a.tile)
-            return .init(tile: vt, offsetX: a.offsetX, offsetY: a.offsetY, scale: a.scale)
+            await decoded.store(vector: vt, for: tile)
+            return vt
         } catch TileFetcher.FetchError.notFound {
             // No tile means no features (open land), which is not the same as "unknown".
             let empty = VectorTile.empty
-            await decoded.store(vector: empty, for: a.tile)
-            return .init(tile: empty, offsetX: a.offsetX, offsetY: a.offsetY, scale: a.scale)
+            await decoded.store(vector: empty, for: tile)
+            return empty
         } catch {
             return nil
         }

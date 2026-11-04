@@ -14,7 +14,8 @@ public final class MapTileCache {
     /// Images from the previous fog state, drawn until their replacement is ready (avoids flashing).
     @ObservationIgnored private var staleImages: [TileID: CGImage] = [:]
 
-    @ObservationIgnored private let provider: TileProvider
+    /// Shared with `WaypointCache`, so both read the same downloaded vector tiles.
+    @ObservationIgnored public let provider: TileProvider
     @ObservationIgnored private var bases: [TileID: RGBAImage] = [:]
     @ObservationIgnored private var baseOrder: [TileID] = []
     @ObservationIgnored private var pending: Set<TileID> = []

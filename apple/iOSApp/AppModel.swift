@@ -7,7 +7,8 @@ import Observation
 @Observable
 final class AppModel {
     let fog = FogStore()
-    let tiles = MapTileCache()
+    let tiles: MapTileCache
+    let waypoints: WaypointCache
     var camera: MapCamera
     var player: GeoPoint?
     var status: String?
@@ -18,6 +19,9 @@ final class AppModel {
     @ObservationIgnored private var sync: FogSync?
 
     init() {
+        let tiles = MapTileCache()
+        self.tiles = tiles
+        waypoints = WaypointCache(provider: tiles.provider)
         camera = MapCamera(center: GeoPoint(latitude: 50.06, longitude: 19.94), zoom: 12)
         if let start = location.point ?? fog.grid.anyExploredPoint {
             camera = MapCamera(center: start, zoom: 13)

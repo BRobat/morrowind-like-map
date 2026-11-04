@@ -1,0 +1,32 @@
+{
+  "comment": "Hand-picked demo waypoints around Kraków and the Ojców valley for tools/preview.py --places-demo. Coordinates are approximate. The apps read real places from the OpenMapTiles place / mountain_peak / poi layers instead.",
+  "places": [
+    { "name": "Kraków", "kind": "city", "lat": 50.0614, "lon": 19.9366, "rank": 2 },
+    { "name": "Wieliczka", "kind": "town", "lat": 49.9870, "lon": 20.0650, "rank": 8 },
+    { "name": "Skawina", "kind": "town", "lat": 49.9750, "lon": 19.8280, "rank": 8 },
+    { "name": "Niepołomice", "kind": "town", "lat": 50.0340, "lon": 20.2180, "rank": 9 },
+    { "name": "Świątniki Górne", "kind": "town", "lat": 49.9350, "lon": 19.9550, "rank": 11 },
+    { "name": "Skała", "kind": "town", "lat": 50.2290, "lon": 19.8540, "rank": 11 },
+    { "name": "Zielonki", "kind": "village", "lat": 50.1200, "lon": 19.9200 },
+    { "name": "Zabierzów", "kind": "village", "lat": 50.1140, "lon": 19.7950 },
+    { "name": "Michałowice", "kind": "village", "lat": 50.1630, "lon": 19.9800 },
+    { "name": "Mogilany", "kind": "village", "lat": 49.9400, "lon": 19.9000 },
+    { "name": "Liszki", "kind": "village", "lat": 50.0400, "lon": 19.7700 },
+    { "name": "Kocmyrzów", "kind": "village", "lat": 50.1300, "lon": 20.1300 },
+    { "name": "Igołomia", "kind": "village", "lat": 50.0900, "lon": 20.2600 },
+    { "name": "Ojców", "kind": "village", "lat": 50.2108, "lon": 19.8296 },
+    { "name": "Sułoszowa", "kind": "village", "lat": 50.2700, "lon": 19.7200 },
+    { "name": "Smardzowice", "kind": "village", "lat": 50.1950, "lon": 19.8200 },
+    { "name": "Złota Góra", "kind": "hamlet", "lat": 50.2150, "lon": 19.8050 },
+    { "name": "Prądnik Korzkiewski", "kind": "village", "lat": 50.1700, "lon": 19.8700 },
+    { "name": "Pieskowa Skała", "kind": "castle", "lat": 50.2445, "lon": 19.7795 },
+    { "name": "Zamek w Ojcowie", "kind": "ruins", "lat": 50.2096, "lon": 19.8312 },
+    { "name": "Jaskinia Łokietka", "kind": "cave", "lat": 50.2178, "lon": 19.8193 },
+    { "name": "Grota Ciemna", "kind": "cave", "lat": 50.2034, "lon": 19.8262 },
+    { "name": "Kaplica Na Wodzie", "kind": "shrine", "lat": 50.2128, "lon": 19.8318 },
+    { "name": "Góra Chełmowa", "kind": "viewpoint", "lat": 50.2050, "lon": 19.8400 },
+    { "name": "Pole biwakowe", "kind": "camp", "lat": 50.2230, "lon": 19.8260 },
+    { "name": "Źródło Miłości", "kind": "spring", "lat": 50.2075, "lon": 19.8280 },
+    { "name": "Okopy", "kind": "peak", "lat": 50.2280, "lon": 19.7980, "ele": 482 }
+  ]
+}

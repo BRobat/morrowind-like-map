@@ -1,7 +1,7 @@
 import Foundation
 
-/// Minimal Mapbox Vector Tile (MVT v2) decoder: enough to read water polygons and
-/// waterway lines from OpenFreeMap (OpenMapTiles schema). No external dependencies.
+/// Minimal Mapbox Vector Tile (MVT v2) decoder: enough to read water polygons, waterway lines
+/// and place / POI points from OpenFreeMap (OpenMapTiles schema). No external dependencies.
 public struct VectorTile: Sendable {
     public enum GeometryType: Int, Sendable {
         case unknown = 0, point = 1, lineString = 2, polygon = 3
@@ -22,6 +22,8 @@ public struct VectorTile: Sendable {
     }
 
     public struct Feature: Sendable {
+        /// Optional feature id (OpenMapTiles derives it from the OSM id, so it is stable across zooms).
+        public var id: UInt64?
         public var type: GeometryType
         public var properties: [String: Value]
         /// Paths in tile coordinates (0...extent). For polygons, each path is a closed ring;
@@ -94,12 +96,14 @@ public struct VectorTile: Sendable {
 
     private static func decodeFeature(_ bytes: ArraySlice<UInt8>, keys: [String], values: [Value]) throws -> Feature {
         var r = ProtobufReader(bytes)
+        var id: UInt64?
         var type = GeometryType.unknown
         var tags: [UInt64] = []
         var geometry: [UInt64] = []
         while let next = try r.nextField() {
             let (field, wire) = next
             switch (field, wire) {
+            case (1, 0): id = try r.readVarint()
             case (2, 2): tags = try r.readPackedVarints()
             case (3, 0): type = GeometryType(rawValue: Int(try r.readVarint())) ?? .unknown
             case (4, 2): geometry = try r.readPackedVarints()
@@ -113,7 +117,7 @@ public struct VectorTile: Sendable {
             if k < keys.count, v < values.count { props[keys[k]] = values[v] }
             i += 2
         }
-        return Feature(type: type, properties: props, paths: decodeGeometry(geometry))
+        return Feature(id: id, type: type, properties: props, paths: decodeGeometry(geometry))
     }
 
     static func decodeGeometry(_ cmds: [UInt64]) -> [[Point]] {

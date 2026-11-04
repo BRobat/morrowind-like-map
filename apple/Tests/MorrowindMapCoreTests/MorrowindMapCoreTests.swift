@@ -226,3 +226,170 @@ final class PaletteTests: XCTestCase {
         XCTAssertGreaterThan(Int(land.r), Int(land.b), "land should be brown")
     }
 }
+
+final class WaypointTests: XCTestCase {
+    enum V { case s(String), u(UInt64) }
+
+    struct F {
+        var id: UInt64?
+        var props: [(String, V)]
+        var x: Int64
+        var y: Int64
+    }
+
+    struct L {
+        var name: String
+        var features: [F]
+    }
+
+    /// Hand-encodes an MVT with point layers. Each feature: (id, properties, x, y) in a 4096 extent.
+    static func pointTile(_ layers: [L]) -> Data {
+        func varint(_ v: UInt64) -> [UInt8] {
+            var v = v, out: [UInt8] = []
+            repeat {
+                var b = UInt8(v & 0x7F); v >>= 7
+                if v != 0 { b |= 0x80 }
+                out.append(b)
+            } while v != 0
+            return out
+        }
+        func zz(_ v: Int64) -> UInt64 { UInt64(bitPattern: (v << 1) ^ (v >> 63)) }
+        func field(_ n: Int, _ wire: Int) -> [UInt8] { varint(UInt64(n << 3 | wire)) }
+        func bytes(_ n: Int, _ b: [UInt8]) -> [UInt8] { field(n, 2) + varint(UInt64(b.count)) + b }
+        func packed(_ n: Int, _ vals: [UInt64]) -> [UInt8] { bytes(n, vals.flatMap(varint)) }
+
+        var tile: [UInt8] = []
+        for layer in layers {
+            var keys: [String] = []
+            var values: [[UInt8]] = []
+            var features: [[UInt8]] = []
+            for f in layer.features {
+                var tags: [UInt64] = []
+                for (k, v) in f.props {
+                    if !keys.contains(k) { keys.append(k) }
+                    let enc: [UInt8]
+                    switch v {
+                    case .s(let s): enc = bytes(1, Array(s.utf8))
+                    case .u(let u): enc = field(5, 0) + varint(u)
+                    }
+                    tags.append(UInt64(keys.firstIndex(of: k)!))
+                    tags.append(UInt64(values.count))
+                    values.append(enc)
+                }
+                var feature: [UInt8] = []
+                if let id = f.id { feature += field(1, 0) + varint(id) }
+                feature += packed(2, tags) + field(3, 0) + varint(1) + packed(4, [9, zz(f.x), zz(f.y)])
+                features.append(feature)
+            }
+            var body = field(15, 0) + varint(2) + bytes(1, Array(layer.name.utf8))
+            for f in features { body += bytes(2, f) }
+            for k in keys { body += bytes(3, Array(k.utf8)) }
+            for v in values { body += bytes(4, v) }
+            body += field(5, 0) + varint(4096)
+            tile += bytes(3, body)
+        }
+        return Data(tile)
+    }
+
+    func testExtractsPlacesPeaksAndPOIs() throws {
+        let data = Self.pointTile([
+            L(name: "place", features: [
+                F(id: 7, props: [("class", .s("town")), ("name", .s("Wieliczka")), ("rank", .u(12))], x: 2048, y: 2048),
+                F(id: 8, props: [("class", .s("village")), ("name", .s("Buffer"))], x: -10, y: 100), // neighbour's buffer
+                F(id: 9, props: [("class", .s("suburb")), ("name", .s("Podgórze"))], x: 100, y: 100),  // not a waypoint kind
+                F(id: 10, props: [("class", .s("hamlet"))], x: 200, y: 200),                          // no name
+            ]),
+            L(name: "mountain_peak", features: [
+                F(id: 11, props: [("name", .s("Rysy")), ("ele", .u(2499)), ("class", .s("peak"))], x: 0, y: 0),
+            ]),
+            L(name: "poi", features: [
+                F(id: 12, props: [("class", .s("lodging")), ("subclass", .s("alpine_hut")), ("name", .s("Murowaniec"))], x: 4095, y: 4095),
+                F(id: 13, props: [("class", .s("shop")), ("subclass", .s("bakery")), ("name", .s("Bread"))], x: 300, y: 300),
+            ]),
+        ])
+        let vt = try VectorTile(data: data)
+        let tile = TileID(z: 10, x: 568, y: 351)
+        let wps = WaypointExtractor.waypoints(in: vt, tile: tile)
+        XCTAssertEqual(wps.map(\.name), ["Wieliczka", "Rysy", "Murowaniec"])
+        XCTAssertEqual(wps.map(\.kind), [.town, .peak, .hut])
+
+        let town = wps[0]
+        XCTAssertEqual(town.id, "place:7")
+        XCTAssertEqual(town.rank, 12)
+        // Tile centre.
+        let expected = WebMercator.geo(worldX: (568.5) / 1024, worldY: (351.5) / 1024)
+        XCTAssertEqual(town.location.latitude, expected.latitude, accuracy: 1e-9)
+        XCTAssertEqual(town.location.longitude, expected.longitude, accuracy: 1e-9)
+
+        XCTAssertEqual(wps[1].elevation, 2499)
+        XCTAssertEqual(wps[1].label, "Rysy 2499 m")
+    }
+
+    func testPOIMapping() {
+        XCTAssertEqual(WaypointKind(poiClass: "castle", subclass: "ruins"), .ruins)
+        XCTAssertEqual(WaypointKind(poiClass: "castle", subclass: "castle"), .castle)
+        XCTAssertEqual(WaypointKind(poiClass: "place_of_worship", subclass: "church"), .shrine)
+        XCTAssertEqual(WaypointKind(poiClass: "attraction", subclass: "viewpoint"), .viewpoint)
+        XCTAssertNil(WaypointKind(poiClass: "fast_food", subclass: "fast_food"))
+    }
+
+    func testZoomTiers() {
+        let p = GeoPoint(latitude: 50, longitude: 20)
+        let city = Waypoint(id: "c", name: "C", kind: .city, location: p, rank: 1)
+        let village = Waypoint(id: "v", name: "V", kind: .village, location: p)
+        let hut = Waypoint(id: "h", name: "H", kind: .hut, location: p)
+        XCTAssertTrue(city.isVisible(atZoom: 5))
+        XCTAssertFalse(village.isVisible(atZoom: 10))
+        XCTAssertTrue(village.isVisible(atZoom: 11))
+        XCTAssertFalse(hut.isVisible(atZoom: 13))
+        XCTAssertTrue(hut.isVisible(atZoom: 14))
+        XCTAssertFalse(hut.showsLabel(atZoom: 14))
+        XCTAssertTrue(hut.showsLabel(atZoom: 15))
+    }
+
+    func testDiscovery() {
+        var fog = FogGrid()
+        let start = GeoPoint(latitude: 50.0, longitude: 20.0)
+        fog.reveal(start, radius: 50)
+        // ~300 m north of the explored spot.
+        let near = GeoPoint(latitude: 50.0027, longitude: 20.0)
+        let village = Waypoint(id: "v", name: "V", kind: .village, location: near)   // 500 m radius
+        let hut = Waypoint(id: "h", name: "H", kind: .hut, location: near)           // 150 m radius
+        let town = Waypoint(id: "t", name: "T", kind: .town, location: GeoPoint(latitude: 51, longitude: 21))
+        XCTAssertTrue(fog.discovered(village))
+        XCTAssertFalse(fog.discovered(hut))
+        XCTAssertFalse(fog.discovered(town))
+
+        XCTAssertTrue(WaypointVisibility.discovered.shows(village, discovered: true))
+        XCTAssertFalse(WaypointVisibility.discovered.shows(hut, discovered: false))
+        XCTAssertTrue(WaypointVisibility.discovered.shows(town, discovered: false)) // towns are landmarks
+        XCTAssertTrue(WaypointVisibility.all.shows(hut, discovered: false))
+        XCTAssertFalse(WaypointVisibility.off.shows(town, discovered: true))
+    }
+
+    func testLayoutAvoidsOverlapsAndPrefersImportantPlaces() {
+        let p = GeoPoint(latitude: 50, longitude: 20)
+        let city = Waypoint(id: "c", name: "Kraków", kind: .city, location: p, rank: 1)
+        let village = Waypoint(id: "v", name: "Zabierzów", kind: .village, location: p)
+        let far = Waypoint(id: "f", name: "Far away", kind: .village, location: p)
+        let placed = WaypointLayout.layout([
+            .init(waypoint: village, x: 102, y: 100, discovered: true),
+            .init(waypoint: city, x: 100, y: 100, discovered: true),
+            .init(waypoint: far, x: 400, y: 400, discovered: true),
+        ], zoom: 12)
+        XCTAssertEqual(placed.map(\.waypoint.id), ["c", "f"])
+        XCTAssertNotNil(placed[0].label)
+        XCTAssertEqual(placed[0].anchor, .right)
+
+        // A label that would run into a neighbour's icon moves to the other side.
+        let a = Waypoint(id: "a", name: "Aaaa", kind: .village, location: p)
+        let b = Waypoint(id: "b", name: "Bbbb", kind: .village, location: p)
+        let moved = WaypointLayout.layout([
+            .init(waypoint: a, x: 100, y: 100, discovered: true),
+            .init(waypoint: b, x: 125, y: 100, discovered: true),
+        ], zoom: 12)
+        XCTAssertEqual(moved.count, 2)
+        XCTAssertEqual(moved[0].anchor, .left)
+        XCTAssertEqual(moved[1].anchor, .right)
+    }
+}

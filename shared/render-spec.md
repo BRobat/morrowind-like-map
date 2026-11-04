@@ -1,8 +1,8 @@
 # Morrowind-style tile rendering
 
 The look is a hand-drawn parchment map. Land is shades of brown that get darker with elevation and is
-lit by hillshade. Water is a muted blue with a dark ink shoreline. There are no roads, labels or
-buildings. Every platform renders tiles on the device from raw data, following the steps below with the
+lit by hillshade. Water is a muted blue with a dark ink shoreline. There are no roads or buildings;
+named places are an ink overlay on top (step 8). Every platform renders tiles on the device from raw data, following the steps below with the
 values in [`palette.json`](palette.json). [`tools/preview.py`](../tools/preview.py) is the executable
 reference.
 
@@ -47,6 +47,8 @@ Tiles are 256 px Web Mercator XYZ tiles.
    n = (h & 0xFFFF) / 65535
    ```
 7. **Fog of war** is composited on top. See [`fog-format.md`](fog-format.md).
+8. **Waypoints** (towns, villages, POIs) are drawn as a vector overlay above the tiles, not baked into
+   them, so labels stay sharp and can cross tile edges. See [`waypoints-spec.md`](waypoints-spec.md).
 
 Cache the base tile (steps 1–6) separately from the fog composite. The base never changes; the fog
 changes after every run.
