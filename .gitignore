@@ -1,0 +1,13 @@
+.DS_Store
+# Xcode / SwiftPM
+apple/.build/
+apple/.swiftpm/
+apple/*.xcodeproj/
+apple/iOSApp/Info.plist
+apple/iOSApp/*.entitlements
+apple/WatchApp/Info.plist
+apple/WatchApp/*.entitlements
+xcuserdata/
+DerivedData/
+# Python
+__pycache__/

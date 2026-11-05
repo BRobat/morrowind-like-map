@@ -1,0 +1,40 @@
+{
+  "comment": "Shared Morrowind-style palette. All platforms (apple, garmin, android, tools/preview.py) must read the same values. Colors are sRGB hex. Elevation in meters.",
+  "version": 1,
+  "land": [
+    { "elevation": 0,    "color": "#C9B48A" },
+    { "elevation": 200,  "color": "#BCA174" },
+    { "elevation": 600,  "color": "#A88A5E" },
+    { "elevation": 1200, "color": "#8E7049" },
+    { "elevation": 2000, "color": "#735838" },
+    { "elevation": 3000, "color": "#5E4630" },
+    { "elevation": 5000, "color": "#4A3726" }
+  ],
+  "water": {
+    "shallow": "#6F8E96",
+    "deep": "#4D6B78",
+    "deepAtMeters": 200,
+    "shoreline": "#4B3A28",
+    "shorelineWidthPx": 1
+  },
+  "hillshade": {
+    "azimuthDegrees": 315,
+    "altitudeDegrees": 45,
+    "exaggeration": 1.0,
+    "strength": 0.45,
+    "minFactor": 0.55,
+    "maxFactor": 1.25,
+    "lowZoomBoostBelow": 12,
+    "lowZoomBoostPerLevel": 0.35
+  },
+  "parchment": {
+    "noiseAmplitude": 0.05
+  },
+  "fog": {
+    "hiddenColor": "#D8C8A2",
+    "hiddenOpacity": 0.75,
+    "grayedDesaturation": 1.0,
+    "grayedDarken": 0.25,
+    "edgeSoftnessPx": 6
+  }
+}
