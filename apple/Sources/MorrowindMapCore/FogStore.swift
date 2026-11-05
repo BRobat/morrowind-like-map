@@ -59,14 +59,16 @@ public final class FogStore {
     }
 
     /// Reveals along a recorded track. Returns the number of newly explored cells.
+    /// With `broadcast: false` the change isn't pushed to the paired device (used for live
+    /// tracking, whose points reach the other device on their own).
     @discardableResult
-    public func reveal(track: [GeoPoint]) -> Int {
+    public func reveal(track: [GeoPoint], broadcast: Bool = true) -> Int {
         guard !track.isEmpty else { return 0 }
         var bounds: CellRect?
         let added = grid.reveal(track: track, radius: revealRadiusMeters, bounds: &bounds)
         if added > 0 {
             commit(bounds)
-            onLocalChange?(grid)
+            if broadcast { onLocalChange?(grid) }
         }
         return added
     }
@@ -74,7 +76,7 @@ public final class FogStore {
     /// Reveals many tracks with a single save, redraw and sync. The cell math runs off the main actor.
     /// Returns the number of newly explored cells.
     @discardableResult
-    public func reveal(tracks: [[GeoPoint]]) async -> Int {
+    public func reveal(tracks: [[GeoPoint]], broadcast: Bool = true) async -> Int {
         let tracks = tracks.filter { !$0.isEmpty }
         guard !tracks.isEmpty else { return 0 }
         let start = grid
@@ -91,7 +93,7 @@ public final class FogStore {
         let added = grid.count - before
         if added > 0 {
             commit(bounds)
-            onLocalChange?(grid)
+            if broadcast { onLocalChange?(grid) }
         }
         return added
     }

@@ -70,7 +70,9 @@ targets:
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.bartrobat.morrowindmap
         NSHealthShareUsageDescription: "Your recorded workout routes reveal the parts of the map you have explored. The app never turns on GPS itself."
-        NSLocationWhenInUseUsageDescription: "Shows where you are on the map using the position your watch already knows. The app doesn't start GPS tracking."
+        NSLocationWhenInUseUsageDescription: "The minimap follows you and reveals the places you walk through. GPS is on only while the app is open or while you are exploring."
+        # Lets an exploration keep logging with the screen off.
+        UIBackgroundModes: [location]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.bartrobat.morrowindmap.watchkitapp

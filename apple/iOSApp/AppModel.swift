@@ -8,6 +8,8 @@ import Observation
 final class AppModel {
     let fog = FogStore()
     let tiles = MapTileCache()
+    /// Navigation target, shared with the watch's compass.
+    let targets = TargetStore()
     var camera: MapCamera
     var player: GeoPoint?
     var status: String?
@@ -16,6 +18,8 @@ final class AppModel {
     @ObservationIgnored private let healthKit = HealthKitRouteImporter.isAvailable ? HealthKitRouteImporter() : nil
     @ObservationIgnored private let location = LastKnownLocation()
     @ObservationIgnored private var sync: FogSync?
+    /// Tracks the watch logged live while exploring, kept so a full re-import can reveal them again.
+    @ObservationIgnored private let watchTracks = RecordedTrackLog()
 
     init() {
         camera = MapCamera(center: GeoPoint(latitude: 50.06, longitude: 19.94), zoom: 12)
@@ -24,7 +28,8 @@ final class AppModel {
         }
         player = location.point
         location.onChange = { [weak self] p in self?.player = p }
-        sync = FogSync(store: fog)
+        sync = FogSync(store: fog, target: targets)
+        sync?.onTrackChunk = { [weak self] chunk in self?.receiveWatchTrack(chunk) }
         // The model is created at process launch, also when HealthKit wakes the app in the
         // background, where no view appears. Register the observer here so that wake-up isn't lost.
         if healthKit?.hasImportedBefore == true { startObserving() }
@@ -51,6 +56,27 @@ final class AppModel {
         }
     }
 
+    /// Points the watch logged while exploring. Saved first, then revealed. Not pushed back to
+    /// the watch: it has already revealed the same points itself.
+    private func receiveWatchTrack(_ chunk: TrackChunk) {
+        watchTracks.append(chunk)
+        let fog = self.fog
+        Task {
+            let added = await fog.reveal(tracks: [chunk.points], broadcast: false)
+            if added > 0 { self.status = "Watch explored \(added) new cells" }
+        }
+    }
+
+    func setTarget(_ p: GeoPoint?) {
+        targets.set(p)
+        status = p == nil ? "Target cleared" : "Target set. Your watch's compass points to it."
+    }
+
+    var guidance: TargetGuidance? {
+        guard let player, let target = targets.target else { return nil }
+        return TargetGuidance(from: player, to: target.point, heading: nil)
+    }
+
     func onForeground() {
         location.refresh()
     }
@@ -71,11 +97,13 @@ final class AppModel {
         }
     }
 
-    /// Re-reads every workout (e.g. after changing the reveal radius).
+    /// Re-reads every workout and every track logged on the watch (e.g. after changing the reveal radius).
     func reimportAll() async {
         healthKit?.resetAnchor()
         fog.reset()
         await importWorkouts()
+        let tracks = watchTracks.allTracks()
+        if !tracks.isEmpty { await fog.reveal(tracks: tracks) }
     }
 
     func importGPX(from urls: [URL]) async {

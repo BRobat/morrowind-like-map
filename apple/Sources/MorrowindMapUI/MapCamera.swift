@@ -50,6 +50,14 @@ public struct MapCamera: Equatable, Sendable {
         return (viewSize.w / 2 + dx * worldSize, viewSize.h / 2 + (w.y - centerY) * worldSize)
     }
 
+    /// The place under a screen point (inverse of `screenPoint`).
+    public func geoPoint(atScreen x: Double, _ y: Double, viewSize: (w: Double, h: Double)) -> GeoPoint {
+        var wx = centerX + (x - viewSize.w / 2) / worldSize
+        wx -= floor(wx)
+        let wy = min(max(centerY + (y - viewSize.h / 2) / worldSize, 0), 1)
+        return WebMercator.geo(worldX: wx, worldY: wy)
+    }
+
     /// Tiles covering the view at `tileZoom`, with their top-left corner and side length in points.
     /// X is not wrapped here so tiles line up across the antimeridian; normalise before fetching.
     public func visibleTiles(viewSize: (w: Double, h: Double)) -> [(tile: TileID, x: Double, y: Double, side: Double)] {

@@ -3,7 +3,9 @@
 A real-world map drawn like the in-game map from *The Elder Scrolls III: Morrowind*: parchment-brown
 relief from a heightmap and muted blue water, with no roads or labels. On top sits a **fog of war**:
 the map stays hidden until you have been there. Places are revealed from GPS routes your watch
-**already records** during runs, hikes and rides. The app never turns on GPS itself.
+**already records** during runs, hikes and rides, and from the watch app's **minimap**, which
+follows you live and logs where you walk. A compass on the watch points to a target you pick on
+the map, like the quest marker in the game.
 
 | Terrain (z11, Alps) | Fog: hidden | Fog: grayed |
 |---|---|---|

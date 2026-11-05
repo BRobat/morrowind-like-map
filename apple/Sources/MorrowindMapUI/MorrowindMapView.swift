@@ -2,12 +2,15 @@ import MorrowindMapCore
 import SwiftUI
 
 /// The Morrowind-style map with fog of war. Works on iOS (drag + pinch) and watchOS (drag + Digital Crown).
+/// With `onSelect`, a long press (iOS) or a tap (watchOS) picks a place, e.g. a navigation target.
 public struct MorrowindMapView: View {
     @Binding var camera: MapCamera
     let fog: FogStore
     let tiles: MapTileCache
     /// Last known position, if any. Never requested by the map itself.
     let player: GeoPoint?
+    let target: GeoPoint?
+    let onSelect: ((GeoPoint) -> Void)?
 
     @State private var dragStart: MapCamera?
     @State private var pinchStart: MapCamera?
@@ -15,11 +18,14 @@ public struct MorrowindMapView: View {
     @State private var crownZoom: Double = 12
     #endif
 
-    public init(camera: Binding<MapCamera>, fog: FogStore, tiles: MapTileCache, player: GeoPoint? = nil) {
+    public init(camera: Binding<MapCamera>, fog: FogStore, tiles: MapTileCache, player: GeoPoint? = nil,
+                target: GeoPoint? = nil, onSelect: ((GeoPoint) -> Void)? = nil) {
         self._camera = camera
         self.fog = fog
         self.tiles = tiles
         self.player = player
+        self.target = target
+        self.onSelect = onSelect
     }
 
     public var body: some View {
@@ -31,7 +37,8 @@ public struct MorrowindMapView: View {
             ZStack {
                 Canvas { ctx, _ in
                     drawTiles(visible, in: &ctx)
-                    if let player { drawPlayer(at: camera.screenPoint(for: player, viewSize: size), in: &ctx) }
+                    if let target { MapSymbols.drawTarget(at: camera.screenPoint(for: target, viewSize: size), in: &ctx) }
+                    if let player { MapSymbols.drawPlayer(at: camera.screenPoint(for: player, viewSize: size), in: &ctx) }
                 }
                 vignette
             }
@@ -40,10 +47,15 @@ public struct MorrowindMapView: View {
             .gesture(dragGesture)
             #if os(iOS)
             .simultaneousGesture(pinchGesture)
+            .simultaneousGesture(selectGesture(size))
             .onTapGesture(count: 2) { location in
                 withAnimation(.easeOut(duration: 0.25)) {
                     camera.zoom(to: camera.zoom + 1, anchor: (location.x - size.w / 2, location.y - size.h / 2))
                 }
+            }
+            #else
+            .onTapGesture(coordinateSpace: .local) { location in
+                onSelect?(camera.geoPoint(atScreen: location.x, location.y, viewSize: size))
             }
             #endif
             .task(id: RequestKey(tiles: visible.compactMap { $0.tile.normalized }, revision: fog.revision, style: fog.style)) {
@@ -72,18 +84,6 @@ public struct MorrowindMapView: View {
             let rect = CGRect(x: v.x, y: v.y, width: v.side, height: v.side).insetBy(dx: -0.25, dy: -0.25)
             ctx.draw(Image(decorative: img, scale: 1), in: rect)
         }
-    }
-
-    /// A small arrowhead in dark red ink, as used for the player on the in-game map.
-    private func drawPlayer(at p: (x: Double, y: Double), in ctx: inout GraphicsContext) {
-        var path = Path()
-        path.move(to: CGPoint(x: p.x, y: p.y - 8))
-        path.addLine(to: CGPoint(x: p.x + 6, y: p.y + 6))
-        path.addLine(to: CGPoint(x: p.x, y: p.y + 2))
-        path.addLine(to: CGPoint(x: p.x - 6, y: p.y + 6))
-        path.closeSubpath()
-        ctx.fill(path, with: .color(Color(red: 0.55, green: 0.12, blue: 0.08)))
-        ctx.stroke(path, with: .color(Color(red: 0.25, green: 0.18, blue: 0.1)), lineWidth: 1)
     }
 
     /// Darkened parchment edges.
@@ -118,6 +118,16 @@ public struct MorrowindMapView: View {
                 camera = c
             }
             .onEnded { _ in pinchStart = nil }
+    }
+
+    /// Long press, then lift: selects the place under the finger.
+    private func selectGesture(_ size: (w: Double, h: Double)) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.5)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onEnded { value in
+                guard let onSelect, case .second(true, let drag?) = value else { return }
+                onSelect(camera.geoPoint(atScreen: drag.location.x, drag.location.y, viewSize: size))
+            }
     }
     #endif
 }

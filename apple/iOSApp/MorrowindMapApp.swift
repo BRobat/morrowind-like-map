@@ -28,7 +28,8 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            MorrowindMapView(camera: $model.camera, fog: model.fog, tiles: model.tiles, player: model.player)
+            MorrowindMapView(camera: $model.camera, fog: model.fog, tiles: model.tiles, player: model.player,
+                             target: model.targets.target?.point) { p in model.setTarget(p) }
                 .ignoresSafeArea()
 
             VStack(spacing: 8) {
@@ -39,8 +40,18 @@ struct ContentView: View {
                         .background(.thinMaterial, in: Capsule())
                         .onTapGesture { model.status = nil }
                 }
+                if let g = model.guidance {
+                    Text("Target: \(Measurement(value: g.distance, unit: UnitLength.meters).formatted(.measurement(width: .abbreviated, usage: .road))) \(GeoMath.compassName(g.bearing))")
+                        .font(.system(.caption, design: .serif).weight(.semibold))
+                        .foregroundStyle(ink)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Color(red: 0.86, green: 0.79, blue: 0.64), in: Capsule())
+                }
                 HStack(spacing: 12) {
                     button("location.north.fill") { model.centerOnPlayer() }
+                    if model.targets.target != nil {
+                        button("mappin.slash") { model.setTarget(nil) }
+                    }
                     button(model.isImporting ? "hourglass" : "figure.run") { Task { await model.importWorkouts() } }
                     button("square.and.arrow.down") { showGPXPicker = true }
                     button("gearshape") { showSettings = true }
@@ -94,8 +105,15 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                     LabeledContent("Explored cells", value: "\(fog.grid.count)")
                 }
+                Section("Navigation") {
+                    Text("Long-press the map to set a target. The compass on your watch points to it.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if model.targets.target != nil {
+                        Button("Clear target") { model.setTarget(nil) }
+                    }
+                }
                 Section {
-                    Button("Re-import all workouts") { Task { await model.reimportAll() } }
+                    Button("Re-import all workouts and watch tracks") { Task { await model.reimportAll() } }
                     Button("Reset explored map", role: .destructive) { confirmReset = true }
                 }
                 Section("Map data") {
